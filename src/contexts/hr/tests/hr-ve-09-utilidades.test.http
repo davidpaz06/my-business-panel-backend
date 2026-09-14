@@ -1,0 +1,195 @@
+### ============================================================
+### HR-VE-09 · Participacion en beneficios / utilidades
+### (Arts. 131, 135, 136, 137, 140 LOTTT)
+### ============================================================
+### Que mide: el reparto anual de beneficios entre los trabajadores.
+### SUSTITUYE al aguinaldo costarricense (que era salario_anual/12).
+###
+### Formula:
+###   1. monto_repartible = beneficios_liquidos * 0.15
+###   2. cociente         = monto_repartible / SUMA(salarios devengados)
+###      cuota_trabajador = cociente * salario_devengado_trabajador
+###   3. topes por trabajador (Art. 131):
+###        min = salario_diario * 30  * (meses_completos / 12)
+###        max = salario_diario * 120 * (meses_completos / 12)
+###      utilidades = clamp(cuota, min, max)
+###
+### Es un reparto COLECTIVO: la cuota de cada trabajador depende de
+### la sumatoria de TODOS los salarios devengados (Art. 136). No se
+### puede calcular por empleado de forma aislada.
+###
+### Excepciones:
+###   - No se imputan perdidas de ejercicios anteriores (Art. 135).
+###   - Entidades SIN fines de lucro estan exentas, pero pagan
+###     bonificacion de fin de anio de min. 30 dias (Art. 140).
+###   - El pago vence a los 2 meses del cierre (Art. 137).
+###
+### DEPENDENCIA: beneficios_liquidos proviene del cierre contable
+### (contexto finances), no de RRHH.
+###
+### ESTADO: Fase 3 del roadmap (submodulo profit).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@tenantId       = a57174b6-c757-4bb9-bae2-ea4e7ffa6088
+@employeeId     = e366b534-4320-42e6-a5db-6e9290cc4969
+@profitPeriodId = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Abrir el ejercicio anual
+# Espera: 201, status = "abierto",
+#         payment_deadline = fiscal_year_end + 2 meses (Art. 137).
+POST {{baseUrl}}/profit-sharing/periods
+Content-Type: application/json
+
+{
+  "fiscal_year": 2026,
+  "fiscal_year_start": "2026-01-01",
+  "fiscal_year_end": "2026-12-31",
+  "is_non_profit": false
+}
+
+
+### 2. Cargar los beneficios liquidos del ejercicio
+# Viene del cierre contable. No se imputan perdidas de ejercicios
+# anteriores (Art. 135): el monto debe entrar tal cual.
+POST {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/liquid-benefits
+Content-Type: application/json
+
+{
+  "liquid_benefits": 2000000.00,
+  "source": "Cierre contable 2026"
+}
+
+
+### 3. Verificar el monto repartible
+# 2000000 * 0.15 = 300000.00
+# Espera: distributable_amount = 300000.0000
+GET {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}
+Accept: application/json
+
+
+### 4. RECHAZO — porcentaje por debajo del 15%
+# Espera: 400. El 15% es piso legal (Art. 131).
+PATCH {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}
+Content-Type: application/json
+
+{
+  "distribution_percentage": 0.10
+}
+
+
+### 5. Porcentaje mejorado por convencion colectiva
+# Espera: 200. Hacia arriba si se permite.
+PATCH {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}
+Content-Type: application/json
+
+{
+  "distribution_percentage": 0.20
+}
+
+
+### ============================================================
+### CALCULO DEL REPARTO (Art. 136)
+### ============================================================
+
+### 6. Calcular las cuotas de todos los trabajadores
+# Espera: una fila por empleado con earned_salary, raw_quota,
+#         min_cap, max_cap y final_amount.
+# total_earned_salaries debe ser la suma de todos los devengados.
+POST {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/calculate
+Content-Type: application/json
+
+{}
+
+
+### 7. Verificar el desglose por trabajador
+# Espera: final_amount = clamp(raw_quota, min_cap, max_cap).
+# Si final_amount sale igual a raw_quota siempre, los topes del
+# Art. 131 no se estan aplicando.
+GET {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/details
+Accept: application/json
+
+
+### ============================================================
+### TOPES POR TRABAJADOR (Art. 131)
+### ============================================================
+
+### 8. Tope MINIMO — 30 dias
+# Trabajador de salario bajo cuya cuota proporcional queda por
+# debajo de 30 dias de salario.
+# salario_diario 66.6667 -> min = 66.6667 * 30 = 2000.00
+# Espera: final_amount = 2000.0000, appliedCap = "min"
+GET {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/details/{{employeeId}}
+Accept: application/json
+
+
+### 9. Tope MAXIMO — 120 dias (4 meses)
+# Trabajador de salario alto cuya cuota supera los 120 dias.
+# Espera: appliedCap = "max", final_amount = salario_diario * 120
+GET {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/details?appliedCap=max
+Accept: application/json
+
+
+### 10. CLAVE — prorrateo por meses completos
+# Trabajador que ingreso en julio: 6 meses completos.
+#   min = 66.6667 * 30  * (6/12) =  1000.00
+#   max = 66.6667 * 120 * (6/12) =  4000.00
+# Espera: complete_months = 6 y los topes reducidos a la mitad.
+GET {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/preview?hireDate=2026-07-01
+Accept: application/json
+
+
+### ============================================================
+### ENTIDADES SIN FINES DE LUCRO (Art. 140)
+### ============================================================
+
+### 11. Ejercicio de entidad sin fines de lucro
+# Exenta del reparto de utilidades, pero obligada a la bonificacion
+# de fin de anio de minimo 30 dias.
+# Espera: is_non_profit = true, distributable_amount = null,
+#         y el calculo deriva a bonificacion (ver HR-VE-10).
+POST {{baseUrl}}/profit-sharing/periods
+Content-Type: application/json
+
+{
+  "fiscal_year": 2027,
+  "fiscal_year_start": "2027-01-01",
+  "fiscal_year_end": "2027-12-31",
+  "is_non_profit": true
+}
+
+
+### ============================================================
+### CIERRE Y PLAZO DE PAGO (Art. 137)
+### ============================================================
+
+### 12. Cerrar el ejercicio
+# Espera: status = "cerrado", closed_at con fecha.
+POST {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/close
+Content-Type: application/json
+
+{}
+
+
+### 13. Verificar el plazo de pago
+# 2 meses siguientes al cierre del ejercicio.
+# Espera: payment_deadline = 2027-02-28
+GET {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}
+Accept: application/json
+
+
+### 14. RECHAZO — recalcular un ejercicio cerrado
+# Espera: 400. Un ejercicio cerrado no se recalcula; se corrige
+# con un ajuste, no reescribiendo el historico.
+POST {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/calculate
+Content-Type: application/json
+
+{}
+
+
+### 15. Fraccion de utilidades para liquidacion
+# Cuando la relacion termina antes del cierre del ejercicio.
+# Espera: prorrateo por meses completos de servicio en el anio.
+GET {{baseUrl}}/profit-sharing/fraction/{{employeeId}}?endDate=2026-08-27
+Accept: application/json

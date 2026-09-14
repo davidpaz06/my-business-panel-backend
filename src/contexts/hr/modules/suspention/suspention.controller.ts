@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { SuspentionService } from './suspention.service';
 import {
@@ -12,9 +12,11 @@ import {
   closeSuspentionDoc,
   updateSuspentionDoc,
 } from '@/docs/contexts/hr/suspention';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Suspention')
 @Controller('suspention')
+@UseGuards(AuthenticationGuard)
 export class SuspentionController {
   constructor(private readonly suspentionService: SuspentionService) {}
 

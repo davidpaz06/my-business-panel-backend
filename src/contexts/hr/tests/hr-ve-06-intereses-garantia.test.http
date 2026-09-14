@@ -1,0 +1,162 @@
+### ============================================================
+### HR-VE-06 · Intereses sobre la garantia depositada (Art. 143)
+### ============================================================
+### Que mide: el rendimiento que genera la garantia de prestaciones
+### mientras permanece depositada.
+###
+### La tasa DEPENDE de donde este la garantia y de si el patrono
+### cumplio con los depositos:
+###
+###   Fideicomiso / Fondo Nacional  -> rendimiento del fideicomiso
+###   Contabilidad de la entidad    -> tasa promedio activa-pasiva BCV
+###   Patrono NO deposito           -> tasa ACTIVA BCV (penalizacion)
+###
+### EXCEPCION POR RETRASO #1: si el patrono no realizo los depositos
+### trimestrales, la garantia devenga la tasa ACTIVA del BCV, la mas
+### alta, como penalizacion, ademas de las sanciones de ley.
+###
+### Los intereses se calculan MENSUALMENTE y se pagan al cumplir
+### cada anio, salvo que el trabajador decida capitalizarlos por
+### escrito.
+###
+### Ejecutar 00-setup.test.http primero (carga tasa_activa_bcv).
+### ESTADO: Fase 2 del roadmap (submodulo severance).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+@depositId  = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Verificar que la tasa activa BCV este cargada
+# Sin este parametro todo el calculo de intereses falla.
+# Espera: param_value = 0.585000
+GET {{baseUrl}}/payroll-parameters/resolve/tasa_activa_bcv?date=2026-08-27
+Accept: application/json
+
+
+### 2. Cargar la tasa promedio activa-pasiva
+# Aplica cuando la garantia esta en la contabilidad de la entidad.
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "tasa_promedio_activa_pasiva_bcv",
+  "param_value": 0.42,
+  "valid_from": "2026-01-01",
+  "source": "Aviso BCV enero 2026"
+}
+
+
+### ============================================================
+### SELECCION DE TASA SEGUN UBICACION Y CUMPLIMIENTO
+### ============================================================
+
+### 3. Garantia en FIDEICOMISO -> rendimiento del fideicomiso
+# Espera: { rateKind: "fideicomiso" }
+GET {{baseUrl}}/severance/interest/rate?location=fideicomiso&depositMade=true&date=2026-08-27
+Accept: application/json
+
+
+### 4. Garantia en CONTABILIDAD -> promedio activa-pasiva
+# Requiere autorizacion escrita del trabajador.
+# Espera: { rateKind: "promedio_activa_pasiva", rate: 0.420000 }
+GET {{baseUrl}}/severance/interest/rate?location=contabilidad&depositMade=true&date=2026-08-27
+Accept: application/json
+
+
+### 5. CLAVE — trimestre SIN deposito -> tasa ACTIVA BCV
+# Penalizacion del Art. 143. Es la tasa mas alta.
+# Espera: { rateKind: "activa_bcv", rate: 0.585000,
+#           penalty: true, article: "143" }
+GET {{baseUrl}}/severance/interest/rate?location=contabilidad&depositMade=false&date=2026-08-27
+Accept: application/json
+
+
+### 6. La penalizacion aplica aunque la ubicacion sea fideicomiso
+# El incumplimiento del deposito manda sobre la ubicacion.
+# Espera: rateKind = "activa_bcv"
+GET {{baseUrl}}/severance/interest/rate?location=fideicomiso&depositMade=false&date=2026-08-27
+Accept: application/json
+
+
+### ============================================================
+### CALCULO MENSUAL DE INTERESES
+### ============================================================
+
+### 7. Marcar un trimestre como NO depositado
+# Simula el incumplimiento del patrono.
+PATCH {{baseUrl}}/severance/deposits/{{depositId}}
+Content-Type: application/json
+
+{
+  "deposit_made": false
+}
+
+
+### 8. Generar los intereses del periodo
+# interes_mes = saldo_garantia * tasa / 12
+# Espera: los meses del trimestre incumplido salen con
+#         rate_kind = "activa_bcv" y los demas con su tasa normal.
+POST {{baseUrl}}/severance/interest/generate
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "from": "2026-01-01",
+  "to": "2026-08-31"
+}
+
+
+### 9. Consultar el detalle mensual
+# Espera: una fila por mes, cada una con la tasa efectivamente
+# aplicada persistida (no la vigente hoy): el recalculo historico
+# debe ser reproducible.
+GET {{baseUrl}}/severance/interest/{{employeeId}}?from=2026-01-01&to=2026-08-31
+Accept: application/json
+
+
+### 10. Detectar trimestres incumplidos
+# Reporte para el area de RRHH: que trimestres disparan penalizacion.
+# Espera: lista con los deposit_made = false.
+GET {{baseUrl}}/severance/deposits/{{employeeId}}/pending
+Accept: application/json
+
+
+### ============================================================
+### CAPITALIZACION (Art. 143)
+### ============================================================
+
+### 11. Pago anual de intereses (comportamiento por defecto)
+# Espera: capitalized = false, paid_at con fecha.
+POST {{baseUrl}}/severance/interest/settle
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "year": 2026,
+  "capitalize": false
+}
+
+
+### 12. Capitalizacion a solicitud escrita del trabajador
+# El trabajador puede pedir capitalizar en vez de cobrar.
+# Espera: capitalized = true; el monto se suma al saldo de garantia
+#         y por tanto entra en la base del calculo siguiente.
+POST {{baseUrl}}/severance/interest/settle
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "year": 2026,
+  "capitalize": true,
+  "authorization_ref": "SOL-CAP-2026-004"
+}
+
+
+### 13. Saldo total de la garantia
+# saldo = depositos realizados + intereses capitalizados
+#         - anticipos aprobados (Art. 144)
+# Espera: desglose de los tres componentes.
+GET {{baseUrl}}/severance/balance/{{employeeId}}
+Accept: application/json

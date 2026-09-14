@@ -1,0 +1,141 @@
+### ============================================================
+### HR-VE-10 · Bonificacion de fin de anio (Arts. 132, 140 LOTTT)
+### ============================================================
+### Que mide: el anticipo obligatorio de diciembre, imputable a las
+### utilidades del ejercicio.
+###
+### Reglas:
+###   - Se paga dentro de los primeros 15 DIAS DE DICIEMBRE.
+###   - Minimo 30 dias de salario.
+###   - Es IMPUTABLE a las utilidades (Art. 131): se descuenta del
+###     monto final al cerrar el ejercicio.
+###   - CLAVE: si al cierre no hubo beneficios, lo ya entregado se
+###     considera bonificacion y NO esta sujeto a repeticion. No se
+###     le cobra de vuelta al trabajador ni genera saldo en contra.
+###   - Las entidades sin fines de lucro estan exentas del reparto
+###     de utilidades pero DEBEN pagar esta bonificacion (Art. 140).
+###
+### Formula:
+###   bonificacion = salario_diario * max(dias_utilidades_pactados, 30)
+###
+### ESTADO: Fase 3 del roadmap (submodulo profit).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@tenantId       = a57174b6-c757-4bb9-bae2-ea4e7ffa6088
+@employeeId     = e366b534-4320-42e6-a5db-6e9290cc4969
+@profitPeriodId = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Calcular la bonificacion con el minimo legal
+# salario_diario 66.6667, dias_utilidades = 30 (piso legal)
+#   bonificacion = 66.6667 * 30 = 2000.00
+# Espera: { days: 30, amount: 2000.0000, article: "132" }
+GET {{baseUrl}}/profit-sharing/year-end-bonus/preview/{{employeeId}}?year=2026
+Accept: application/json
+
+
+### 2. Con dias mejorados por convencion
+# Si el tenant pacto 60 dias (ver 00-setup paso 5):
+#   bonificacion = 300 * 60 = 18000.00
+# Espera: days = 60. Se usa el pactado por ser mayor que 30.
+GET {{baseUrl}}/profit-sharing/year-end-bonus/preview/{{employeeId}}?year=2026&explain=true
+Accept: application/json
+
+
+### 3. Nunca por debajo de 30 dias
+# Aunque el parametro se manipule, el piso son 30 dias (Art. 132).
+# Espera: days >= 30 siempre.
+GET {{baseUrl}}/profit-sharing/year-end-bonus/preview/{{employeeId}}?year=2026&daysOverride=10
+Accept: application/json
+
+
+### ============================================================
+### PAGO DEL ANTICIPO
+### ============================================================
+
+### 4. Registrar el pago de la bonificacion
+# Espera: 201, advance_paid y advance_paid_at en
+#         profit_sharing_detail.
+POST {{baseUrl}}/profit-sharing/year-end-bonus
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "fiscal_year": 2026,
+  "amount": 2000.00,
+  "paid_at": "2026-12-10"
+}
+
+
+### 5. Pago fuera del plazo de los primeros 15 dias
+# El Art. 132 fija el plazo dentro de los primeros 15 dias de
+# diciembre. Un pago posterior debe al menos advertirse.
+# Espera: 201 con warning, o 400 segun politica definida.
+POST {{baseUrl}}/profit-sharing/year-end-bonus
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "fiscal_year": 2026,
+  "amount": 2000.00,
+  "paid_at": "2026-12-28"
+}
+
+
+### ============================================================
+### IMPUTACION A LAS UTILIDADES (Art. 131)
+### ============================================================
+
+### 6. La bonificacion se descuenta del monto final
+# Si las utilidades calculadas son 5000 y ya se anticiparon 2000:
+#   saldo a pagar = 3000.00
+# Espera: { finalAmount: 5000, advancePaid: 2000, pending: 3000 }
+GET {{baseUrl}}/profit-sharing/periods/{{profitPeriodId}}/details/{{employeeId}}
+Accept: application/json
+
+
+### ============================================================
+### SIN BENEFICIOS — NO SUJETO A REPETICION (Art. 132)
+### ============================================================
+
+### 7. Cerrar un ejercicio SIN beneficios liquidos
+# Simula un ejercicio en perdida.
+POST {{baseUrl}}/profit-sharing/periods
+Content-Type: application/json
+
+{
+  "fiscal_year": 2028,
+  "fiscal_year_start": "2028-01-01",
+  "fiscal_year_end": "2028-12-31",
+  "is_non_profit": false
+}
+
+
+### 8. CLAVE — lo entregado NO se cobra de vuelta
+# Utilidades calculadas = 0, bonificacion ya pagada = 2000.
+# El resultado NO puede ser un saldo negativo contra el trabajador.
+#
+# Espera: { finalAmount: 0, advancePaid: 2000, pending: 0,
+#           subjectToRepetition: false, article: "132" }
+# Si "pending" sale en -2000, la regla no esta implementada y el
+# sistema estaria cobrando de vuelta un pago irrepetible.
+GET {{baseUrl}}/profit-sharing/periods/no-benefits/details/{{employeeId}}
+Accept: application/json
+
+
+### ============================================================
+### ENTIDADES SIN FINES DE LUCRO (Art. 140)
+### ============================================================
+
+### 9. Exenta del reparto pero obligada a la bonificacion
+# Espera: { profitSharing: null, yearEndBonus: 2000.0000,
+#           article: "140" }
+GET {{baseUrl}}/profit-sharing/year-end-bonus/preview/{{employeeId}}?year=2027
+Accept: application/json
+
+
+### 10. Listado de bonificaciones pagadas del ejercicio
+# Control operativo para el area de RRHH.
+GET {{baseUrl}}/profit-sharing/year-end-bonus?fiscalYear=2026
+Accept: application/json

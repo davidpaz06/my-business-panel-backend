@@ -1,0 +1,191 @@
+### ============================================================
+### HR-VE-07 · Intereses de mora (Arts. 128, 130, 141, 142.f)
+### ============================================================
+### Que mide: la penalizacion por pagar tarde. El salario y las
+### prestaciones son creditos de exigibilidad inmediata y toda mora
+### genera intereses (Arts. 98, 128, 141).
+###
+### EXCEPCION POR RETRASO #2 (Art. 142.f): el pago de prestaciones
+### debe hacerse dentro de los 5 DIAS siguientes a la terminacion.
+### Pasado ese plazo corren intereses a la tasa ACTIVA del BCV,
+### DESDE EL DIA 6 hasta el pago efectivo.
+###
+### Formula:
+###   limite      = fecha_egreso + 5 dias
+###   si fecha_pago <= limite -> mora = 0
+###   dias_mora   = dias entre limite y fecha_pago
+###   tasa_diaria = tasa_activa_bcv / 360
+###   mora        = monto * tasa_diaria * dias_mora
+###
+### La misma logica aplica al salario ordinario (Art. 128) y a la
+### diferencia por salario inferior al minimo (Art. 130), por eso el
+### servicio de mora es transversal y parametrizable.
+###
+### La tasa debe resolverse VIGENTE POR TRAMO temporal, no fija.
+###
+### Ejecutar 00-setup.test.http primero (carga tasa_activa_bcv).
+### ESTADO: Fase 2 del roadmap (submodulo mora).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+
+### ============================================================
+### PLAZO DE GRACIA (Art. 142.f)
+### ============================================================
+
+### 1. Pago DENTRO de los 5 dias -> mora CERO
+# Egreso 2026-08-01, pago 2026-08-05 (dia 4).
+# Espera: { moraDays: 0, moraAmount: 0 }
+POST {{baseUrl}}/mora/calculate
+Content-Type: application/json
+
+{
+  "debt_amount": 50000.00,
+  "due_from": "2026-08-01",
+  "grace_days": 5,
+  "payment_date": "2026-08-05",
+  "debt_kind": "prestaciones"
+}
+
+
+### 2. Pago EXACTAMENTE el dia 5 -> mora CERO
+# El limite es inclusivo: la mora corre desde el dia 6.
+# Espera: { moraDays: 0, moraAmount: 0 }
+POST {{baseUrl}}/mora/calculate
+Content-Type: application/json
+
+{
+  "debt_amount": 50000.00,
+  "due_from": "2026-08-01",
+  "grace_days": 5,
+  "payment_date": "2026-08-06",
+  "debt_kind": "prestaciones"
+}
+
+
+### 3. CLAVE — pago al dia 20 -> mora sobre 14 dias
+# limite      = 2026-08-01 + 5 = 2026-08-06
+# fecha_pago  = 2026-08-20
+# dias_mora   = 14
+# tasa_diaria = 0.585 / 360 = 0.001625
+# mora        = 50000 * 0.001625 * 14 = 1137.50
+#
+# Espera: { moraDays: 14, rate: 0.585000, moraAmount: 1137.5000 }
+POST {{baseUrl}}/mora/calculate
+Content-Type: application/json
+
+{
+  "debt_amount": 50000.00,
+  "due_from": "2026-08-01",
+  "grace_days": 5,
+  "payment_date": "2026-08-20",
+  "debt_kind": "prestaciones"
+}
+
+
+### ============================================================
+### TASA VIGENTE POR TRAMO — no una tasa fija
+### ============================================================
+
+### 4. Cargar un cambio de tasa a mitad de la mora
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "tasa_activa_bcv",
+  "param_value": 0.72,
+  "valid_from": "2026-08-15",
+  "source": "Aviso BCV agosto 2026"
+}
+
+
+### 5. CLAVE — mora que cruza un cambio de tasa
+# Del 2026-08-06 al 2026-08-14 (9 dias) a 0.585
+# Del 2026-08-15 al 2026-08-20 (6 dias) a 0.720
+# Si el resultado usa una sola tasa para todo el periodo, el
+# calculo por tramos NO esta implementado.
+#
+# Espera: un arreglo "segments" con 2 tramos y sus tasas distintas.
+POST {{baseUrl}}/mora/calculate
+Content-Type: application/json
+
+{
+  "debt_amount": 50000.00,
+  "due_from": "2026-08-01",
+  "grace_days": 5,
+  "payment_date": "2026-08-20",
+  "debt_kind": "prestaciones",
+  "explain": true
+}
+
+
+### ============================================================
+### MORA EN OTROS TIPOS DE DEUDA
+### ============================================================
+
+### 6. Mora en el salario ordinario (Art. 128)
+# Sin plazo de gracia de 5 dias: el salario es de exigibilidad
+# inmediata desde su fecha de pago pactada.
+# Espera: moraDays cuenta desde due_from, grace_days = 0.
+POST {{baseUrl}}/mora/calculate
+Content-Type: application/json
+
+{
+  "debt_amount": 2000.00,
+  "due_from": "2026-07-31",
+  "grace_days": 0,
+  "payment_date": "2026-08-10",
+  "debt_kind": "salario"
+}
+
+
+### 7. Diferencia por salario inferior al minimo (Art. 130)
+# Se paga la diferencia MAS los intereses a tasa activa BCV.
+# Espera: { difference, moraAmount, total }
+POST {{baseUrl}}/mora/salary-minimum-difference
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "paid_monthly": 100.00,
+  "period_from": "2026-01-01",
+  "period_to": "2026-06-30",
+  "payment_date": "2026-08-20"
+}
+
+
+### 8. Naturaleza de la deuda (Art. 141)
+# Los intereses de mora son deudas de valor y gozan de los mismos
+# privilegios que la deuda principal.
+# Espera: { debtNature: "deuda_de_valor", privileged: true }
+GET {{baseUrl}}/mora/nature?debtKind=prestaciones
+Accept: application/json
+
+
+### ============================================================
+### INTEGRACION CON LA LIQUIDACION
+### ============================================================
+
+### 9. Liquidacion pendiente que ya genera mora
+# Reporte operativo: egresos sin pagar pasados los 5 dias.
+# Espera: lista con dias de mora acumulados por empleado.
+GET {{baseUrl}}/settlement/overdue
+Accept: application/json
+
+
+### 10. RECHAZO — sin tasa activa cargada a la fecha
+# Si no hay tasa vigente para el tramo, el calculo NO debe asumir
+# un valor por defecto: debe fallar explicitamente.
+# Espera: 400 "No hay tasa_activa_bcv vigente para 2019-01-15"
+POST {{baseUrl}}/mora/calculate
+Content-Type: application/json
+
+{
+  "debt_amount": 1000.00,
+  "due_from": "2019-01-01",
+  "grace_days": 5,
+  "payment_date": "2019-01-15",
+  "debt_kind": "prestaciones"
+}

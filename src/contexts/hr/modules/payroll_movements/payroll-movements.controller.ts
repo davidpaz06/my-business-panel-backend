@@ -1,13 +1,15 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PayrollMovementsService } from './payroll-movements.service';
 import {
   getMovementsByPaysheetDoc,
   getMovementsByDetailDoc,
 } from '@/docs/contexts/hr/payroll_movements';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Payroll Movements')
 @Controller('movements')
+@UseGuards(AuthenticationGuard)
 export class PayrollMovementsController {
   constructor(private readonly pMovement: PayrollMovementsService) {}
 

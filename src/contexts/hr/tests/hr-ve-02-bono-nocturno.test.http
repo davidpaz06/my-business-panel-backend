@@ -1,0 +1,117 @@
+### ============================================================
+### HR-VE-02 · Recargo por bono nocturno (Art. 117 LOTTT)
+### ============================================================
+### Que mide: el sobreprecio de la hora trabajada en jornada
+### nocturna (19:00 a 5:00).
+###
+### Formula:
+###   valor_hora_normal   = salario_normal_diario / horas_jornada
+###   recargo_nocturno    = valor_hora_normal * 0.30
+###   valor_hora_nocturna = valor_hora_normal + recargo_nocturno
+###   monto               = valor_hora_nocturna * horas_nocturnas
+###
+### Base salarial: salario NORMAL (Art. 104), nunca integral.
+### El 0.30 es el MINIMO legal y es parametrizable por tenant
+### (mejorable por convencion colectiva).
+###
+### Ejecutar 00-setup.test.http primero.
+### ESTADO: Fase 2 del roadmap (submodulo journey).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@tenantId   = a57174b6-c757-4bb9-bae2-ea4e7ffa6088
+@branchId   = 8aa62c84-a07a-4ea5-a6df-523ab22089b0
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+
+### 1. Verificar el parametro vigente
+# Espera: param_value = 0.300000 (Art. 117, piso legal).
+GET {{baseUrl}}/payroll-parameters/resolve/recargo_nocturno?date=2026-08-27
+Accept: application/json
+
+
+### 2. Registrar horas nocturnas
+# Empleado con salario 2000.00/mes, jornada de 8 h.
+#   salario_diario = 2000 / 30    = 66.6667
+#   valor_hora     = 66.6667 / 8  =  8.3333
+#   hora_nocturna  = 8.3333 * 1.30 = 10.8333
+#   monto (4 h)    = 10.8333 * 4   = 43.3333
+#
+# Espera: 201, rate_factor = 1.30
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-08-10",
+  "kind": "nocturna",
+  "hours": 4
+}
+
+
+### 3. Calcular el monto del recargo
+# Espera:
+#   { baseHourly: 8.3333, rateFactor: 1.30,
+#     nightHourly: 10.8333, hours: 4, amount: 43.3333,
+#     salaryBasis: "normal", article: "117" }
+GET {{baseUrl}}/journey/night-bonus/{{employeeId}}?from=2026-08-01&to=2026-08-31
+Accept: application/json
+
+
+### 4. El recargo NO usa salario integral
+# Verificacion de la regla de oro: si el calculo usara el salario
+# integral (75.0000/dia) el monto seria 48.75 en vez de 43.3333.
+# Espera: salaryBasis = "normal", baseDaily = 66.6667
+GET {{baseUrl}}/journey/night-bonus/{{employeeId}}?from=2026-08-01&to=2026-08-31&explain=true
+Accept: application/json
+
+
+### 5. Recargo mejorado por convencion colectiva
+# Una convencion puede subir el 30% (Arts. 18.2, 434).
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "recargo_nocturno",
+  "param_value": 0.45,
+  "valid_from": "2026-09-01",
+  "source": "CCT 2026 - recargo nocturno mejorado"
+}
+
+
+### 6. Verificar que el nuevo recargo aplica por vigencia
+# Horas del 2026-09 deben calcularse al 45%, no al 30%.
+#   hora_nocturna = 8.3333 * 1.45 = 12.0833
+#   monto (4 h)   = 48.3333
+# Espera: rateFactor = 1.45, amount = 48.3333
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-09-10",
+  "kind": "nocturna",
+  "hours": 4
+}
+
+
+### 7. Horas de agosto siguen al 30%
+# La tasa se resuelve por la fecha del hecho, no por la vigente hoy.
+# Espera: las horas de agosto conservan rate_factor 1.30.
+GET {{baseUrl}}/overtime/{{employeeId}}?from=2026-08-01&to=2026-09-30&kind=nocturna
+Accept: application/json
+
+
+### 8. RECHAZO — recargo por debajo del minimo legal
+# Espera: 400. El 30% es piso irrenunciable (Art. 117).
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "recargo_nocturno",
+  "param_value": 0.15,
+  "valid_from": "2026-10-01",
+  "source": "CCT invalida"
+}

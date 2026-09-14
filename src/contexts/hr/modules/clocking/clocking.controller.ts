@@ -1,12 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClockingService } from './clocking.service';
 import { ClockInDto } from './dto/clockIn.dto';
 import { ManualClockInDto, ManualClockOutDto } from './dto/manual-clocking.dto';
 import { clockInDoc, clockOutDoc } from '@/docs/contexts/hr/clocking';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Clocking')
 @Controller('clocking')
+@UseGuards(AuthenticationGuard)
 export class ClockingController {
   constructor(private readonly clockingService: ClockingService) {}
 

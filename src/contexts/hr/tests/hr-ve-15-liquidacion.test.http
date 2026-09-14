@@ -1,0 +1,187 @@
+### ============================================================
+### HR-VE-15 · Liquidacion final — orquestacion completa
+### (Arts. 51, 92, 106, 142, 144, 154, 195, 196 LOTTT)
+### ============================================================
+### Que mide: la composicion de todos los conceptos en un unico
+### documento auditable. Es el punto donde converge todo el modulo.
+###
+### ORDEN DE CALCULO (el orden importa: unos conceptos alimentan a
+### otros):
+###   1. Resolver parametros vigentes del tenant a la fecha
+###   2. Construir el Value Object Salary (normal, integral,
+###      alicuotas de utilidades y bono vacacional)
+###   3. Determinar antiguedad exacta (anios completos + fraccion)
+###   4. Prestaciones: via1, via2, excepcion <3 meses, MAX (Art. 142)
+###   5. Intereses de la garantia depositada (Art. 143)
+###   6. Fracciones de vacaciones, bono vacacional y utilidades
+###   7. Indemnizacion Art. 92 si aplica (= prestaciones)
+###   8. Restar anticipos (Art. 144) y descuentos validos (Art. 154)
+###   9. Mora si el pago excede 5 dias del egreso (Art. 142.f)
+###  10. Componer el recibo con desglose por concepto (Art. 106)
+###
+### El total debe ser la SUMA VERIFICABLE de los renglones.
+###
+### Ejecutar todos los tests anteriores primero.
+### ESTADO: Fase 3 del roadmap (submodulo settlement).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId   = e366b534-4320-42e6-a5db-6e9290cc4969
+@settlementId = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Previsualizar la liquidacion completa
+# Espera un cuerpo con:
+#   { hireDate, terminationDate, completeYears, remainderMonths,
+#     lastIntegralDailySalary, lastNormalDailySalary,
+#     via1Amount, via2Amount, selectedVia, severanceAmount,
+#     items: [...], subtotal, moraDays, moraAmount, total }
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27
+Accept: application/json
+
+
+### 2. CLAVE — el total es la suma de los renglones
+# Verificacion aritmetica: sum(items[].amount) debe igualar el
+# subtotal, y subtotal + moraAmount debe igualar el total.
+# Si no cuadra, hay un concepto calculado fuera del desglose.
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27&verify=true
+Accept: application/json
+
+
+### ============================================================
+### DESGLOSE AUDITABLE (Art. 106)
+### ============================================================
+
+### 3. Cada renglon lleva su articulo y su base salarial
+# Espera items con esta forma:
+#   { code: "HR-VE-05", conceptName: "Prestaciones sociales",
+#     article: "142.d", salaryBasis: "integral",
+#     baseAmount, days, amount, formulaText }
+#
+# Renglones esperados en este caso:
+#   HR-VE-05  Prestaciones sociales         142.d  integral  (+)
+#   HR-VE-06  Intereses sobre la garantia   143    integral  (+)
+#   HR-VE-13  Vacaciones fraccionadas       196    normal    (+)
+#   HR-VE-13  Bono vacacional fraccionado   196    normal    (+)
+#   HR-VE-09  Utilidades fraccionadas       131    normal    (+)
+#   HR-VE-14  Indemnizacion Art. 92         92     integral  (+)
+#   HR-VE-08  Anticipos de prestaciones     144    integral  (-)
+#   HR-VE-17  Descuentos                    154    normal    (-)
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27&breakdown=true
+Accept: application/json
+
+
+### 4. Los conceptos que restan van en NEGATIVO
+# Anticipos (Art. 144) y descuentos (Art. 154) deben aparecer con
+# amount negativo, no restados por fuera del desglose.
+# Espera: items con amount < 0 para esos codigos.
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27&onlyDeductions=true
+Accept: application/json
+
+
+### 5. La formula queda en texto legible
+# Para el recibo del trabajador.
+# Espera formulaText del estilo:
+#   "30 dias x 7 anios x salario integral diario 75.0000"
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27&breakdown=true
+Accept: application/json
+
+
+### ============================================================
+### PERSISTENCIA Y AUDITORIA
+### ============================================================
+
+### 6. Generar la liquidacion
+# Espera: 201, status = "calculada",
+#         payment_due_date = termination_date + 5 dias (Art. 142.f).
+POST {{baseUrl}}/settlement
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "termination_date": "2026-08-27"
+}
+
+
+### 7. CLAVE — ambas vias quedan persistidas
+# Prescripcion de prestaciones: 10 anios (Art. 51). Ante un reclamo
+# hay que poder demostrar POR QUE se pago ese monto.
+# Espera: via1_amount y via2_amount NO nulos, selected_via definido.
+GET {{baseUrl}}/settlement/{{settlementId}}
+Accept: application/json
+
+
+### 8. RECHAZO — segunda liquidacion para el mismo egreso
+# Espera: 409 (constraint uq_settlement_employee).
+POST {{baseUrl}}/settlement
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "termination_date": "2026-08-27"
+}
+
+
+### ============================================================
+### PAGO Y MORA (Art. 142.f)
+### ============================================================
+
+### 9. Pago DENTRO del plazo -> sin mora
+# Espera: status = "pagada", mora_amount = 0.
+POST {{baseUrl}}/settlement/{{settlementId}}/pay
+Content-Type: application/json
+
+{
+  "payment_date": "2026-08-31"
+}
+
+
+### 10. Pago FUERA del plazo -> con mora
+# Egreso 2026-08-27, limite 2026-09-01, pago 2026-09-20 -> 19 dias.
+# Espera: mora_days = 19, mora_amount > 0, mora_rate persistida.
+POST {{baseUrl}}/settlement/{{settlementId}}/pay
+Content-Type: application/json
+
+{
+  "payment_date": "2026-09-20"
+}
+
+
+### 11. La mora aparece como renglon del recibo
+# Espera: un item adicional con article "142.f".
+GET {{baseUrl}}/settlement/{{settlementId}}?breakdown=true
+Accept: application/json
+
+
+### ============================================================
+### CASOS BORDE
+### ============================================================
+
+### 12. Liquidacion de antiguedad menor a 3 meses
+# La excepcion del Art. 142.e sustituye el esquema completo.
+# Espera: selected_via = "antiguedad_corta" y un unico renglon de
+#         prestaciones (sin via1/via2 comparadas).
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?hireDate=2026-06-01&endDate=2026-08-01
+Accept: application/json
+
+
+### 13. Recibo imprimible
+# Espera: documento con desglose por concepto y articulo (Art. 106).
+GET {{baseUrl}}/settlement/{{settlementId}}/receipt
+Accept: application/json
+
+
+### 14. Anular una liquidacion
+# Preferir la reversion sobre la edicion del historico.
+POST {{baseUrl}}/settlement/{{settlementId}}/void
+Content-Type: application/json
+
+{
+  "reason": "Error en la fecha de egreso"
+}
+
+
+### 15. Liquidaciones vencidas sin pagar
+# Reporte operativo: las que ya pasaron los 5 dias y acumulan mora.
+GET {{baseUrl}}/settlement/overdue
+Accept: application/json

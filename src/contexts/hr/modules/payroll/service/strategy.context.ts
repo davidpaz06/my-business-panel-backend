@@ -3,12 +3,11 @@ import { IPayrollStrategy } from '../interface/payroll-strategy.interface';
 import { FixedStrategy } from '../strategies/fixed.strategy';
 import { PercentageStrategy } from '../strategies/percentage.strategy';
 import {
-  HolidayStrategy,
+  HolidayWorkedStrategy,
   IncapacityDeductionStrategy,
   IncapacityStrategy,
-  ISRDeduction,
+  NightSurchargeStrategy,
   OvertimeStrategy,
-  VacationsStrategy,
 } from '../strategies/formula.strategy';
 
 @Injectable()
@@ -18,19 +17,17 @@ export class StrategyContext {
   constructor(
     private readonly fixed: FixedStrategy,
     private readonly percentage: PercentageStrategy,
+    private readonly bn: NightSurchargeStrategy,
     private readonly he: OvertimeStrategy,
-    private readonly vac: VacationsStrategy,
-    private readonly hol: HolidayStrategy,
-    private readonly irs: ISRDeduction,
+    private readonly fer: HolidayWorkedStrategy,
     private readonly sub: IncapacityStrategy,
     private readonly inc: IncapacityDeductionStrategy,
   ) {
     this.strategies.set('fixed', this.fixed);
     this.strategies.set('percentage', this.percentage);
+    this.strategies.set('bn', this.bn);
     this.strategies.set('he', this.he);
-    this.strategies.set('vac', this.vac);
-    this.strategies.set('hol', this.hol);
-    this.strategies.set('irs', this.irs);
+    this.strategies.set('fer', this.fer);
     this.strategies.set('sub', this.sub);
     this.strategies.set('inc', this.inc);
   }

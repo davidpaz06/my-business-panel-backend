@@ -1,0 +1,149 @@
+### ============================================================
+### HR-VE-03 · Horas extraordinarias (Arts. 118, 178, 182 LOTTT)
+### ============================================================
+### Que mide: el pago de la hora que excede la jornada ordinaria y
+### el control de los topes legales.
+###
+### Formula (Art. 118):
+###   valor_hora_normal = salario_normal_diario / horas_jornada
+###   valor_hora_extra  = valor_hora_normal * (1 + 0.50)
+###   monto             = valor_hora_extra * horas_extra
+###
+### TOPES OBLIGATORIOS (Art. 178) — el sistema debe BLOQUEAR:
+###   jornada + extras <= 10 h/dia
+###   <= 10 h extra/semana
+###   <= 100 h extra/anio
+###
+### DOBLE RECARGO (Art. 182): las horas extra laboradas SIN permiso
+### de la Inspectoria del Trabajo se pagan con el doble del recargo,
+### es decir 100% en vez de 50% (factor 2.0 en lugar de 1.5).
+###
+### Ejecutar 00-setup.test.http primero.
+### ESTADO: Fase 2 del roadmap (submodulo journey).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@branchId   = 8aa62c84-a07a-4ea5-a6df-523ab22089b0
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+
+### 1. Hora extra AUTORIZADA por la Inspectoria
+# salario_diario = 66.6667, jornada 8 h -> valor_hora = 8.3333
+#   hora_extra = 8.3333 * 1.50 = 12.5000
+#   monto (2h) = 25.0000
+# Espera: 201, rate_factor = 1.50
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-08-03",
+  "kind": "extra",
+  "hours": 2,
+  "inspectoria_authorized": true,
+  "authorization_ref": "INS-2026-00123"
+}
+
+
+### 2. CLAVE — hora extra SIN autorizacion: doble recargo (Art. 182)
+#   hora_extra = 8.3333 * 2.00 = 16.6667   <- 100% de recargo
+#   monto (2h) = 33.3333
+# Espera: 201, rate_factor = 2.00
+# Es el mismo trabajo pero cuesta el doble por falta de permiso.
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-08-04",
+  "kind": "extra",
+  "hours": 2,
+  "inspectoria_authorized": false
+}
+
+
+### 3. Consultar acumulados vigentes
+# Espera: { daily, weekly, yearly } con los topes y lo consumido.
+GET {{baseUrl}}/overtime/accumulated/{{employeeId}}?date=2026-08-04
+Accept: application/json
+
+
+### ============================================================
+### TOPES DEL ART. 178 — los tres rechazos obligatorios
+### ============================================================
+
+### 4. RECHAZO — excede 10 h/dia
+# Jornada ordinaria 8 h + 3 h extra = 11 h > 10 h.
+# Espera: 400 "Excede 10h/dia"
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-08-05",
+  "kind": "extra",
+  "hours": 3,
+  "inspectoria_authorized": true
+}
+
+
+### 5. RECHAZO — excede 10 h extra/semana
+# Cargar primero 9 h en la semana del 2026-08-10, luego pedir 2 mas.
+# Espera: 400 "Excede 10h/sem"
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-08-14",
+  "kind": "extra",
+  "hours": 2,
+  "inspectoria_authorized": true
+}
+
+
+### 6. RECHAZO — excede 100 h extra/anio
+# Con 99 h acumuladas en el anio, pedir 2 mas debe fallar.
+# Espera: 400 "Excede 100h/anio"
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-12-20",
+  "kind": "extra",
+  "hours": 2,
+  "inspectoria_authorized": true
+}
+
+
+### 7. Validacion previa sin persistir
+# Permite al front avisar antes de enviar el registro.
+# Espera: { allowed: false, violated: ["semana"], ... }
+POST {{baseUrl}}/overtime/validate
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "work_date": "2026-08-14",
+  "hours": 2
+}
+
+
+### 8. El limite diario depende del tipo de jornada
+# En jornada nocturna la ordinaria es 7 h, por lo que el margen de
+# extras antes de llegar a 10 h es mayor que en diurna.
+# Espera: el calculo usa la jornada del contrato, no un 8 fijo.
+GET {{baseUrl}}/overtime/accumulated/{{employeeId}}?date=2026-08-04&explain=true
+Accept: application/json
+
+
+### 9. Monto total de extras del periodo
+# Espera: desglose separando autorizadas (1.5x) de no autorizadas (2.0x).
+GET {{baseUrl}}/journey/overtime-pay/{{employeeId}}?from=2026-08-01&to=2026-08-31
+Accept: application/json

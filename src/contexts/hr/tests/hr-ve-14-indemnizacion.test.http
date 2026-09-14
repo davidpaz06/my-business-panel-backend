@@ -1,0 +1,153 @@
+### ============================================================
+### HR-VE-14 · Indemnizacion por despido injustificado (Art. 92)
+### ============================================================
+### Que mide: la indemnizacion adicional cuando la terminacion es
+### por causa ajena al trabajador, o cuando hay despido injustificado
+### y el trabajador opta por no reengancharse.
+###
+### REGLA CLAVE (Art. 92):
+###   La indemnizacion es EQUIVALENTE AL MONTO DE LAS PRESTACIONES
+###   SOCIALES. Es decir, la prestacion se DUPLICA:
+###
+###     prestaciones  = calcularPrestaciones()   // Art. 142 (MAX)
+###     indemnizacion = prestaciones             // Art. 92
+###     total         = prestaciones * 2
+###
+### Punto de atencion: la indemnizacion se calcula sobre el monto YA
+### SELECCIONADO por el Art. 142.d (el mayor entre garantia y
+### retroactivo), no sobre una de las dos vias por separado.
+###
+### La causal de terminacion determina si aplica o no, por eso
+### employee.termination_type es un dato obligatorio al egresar.
+###
+### ESTADO: Fase 3 del roadmap (submodulo settlement).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+
+### ============================================================
+### CAUSALES QUE ACTIVAN LA INDEMNIZACION
+### ============================================================
+
+### 1. Despido injustificado -> SI aplica
+# Espera: { appliesIndemnity: true, article: "92" }
+GET {{baseUrl}}/settlement/indemnity-applies?terminationType=despido_injustificado
+Accept: application/json
+
+
+### 2. Causa ajena al trabajador -> SI aplica
+# Espera: { appliesIndemnity: true }
+GET {{baseUrl}}/settlement/indemnity-applies?terminationType=causa_ajena_al_trabajador
+Accept: application/json
+
+
+### 3. Renuncia -> NO aplica
+# Espera: { appliesIndemnity: false }
+GET {{baseUrl}}/settlement/indemnity-applies?terminationType=renuncia
+Accept: application/json
+
+
+### 4. Despido justificado -> NO aplica
+# Espera: { appliesIndemnity: false }
+GET {{baseUrl}}/settlement/indemnity-applies?terminationType=despido_justificado
+Accept: application/json
+
+
+### 5. Vencimiento de contrato -> NO aplica
+# Espera: { appliesIndemnity: false }
+GET {{baseUrl}}/settlement/indemnity-applies?terminationType=vencimiento_contrato
+Accept: application/json
+
+
+### ============================================================
+### CALCULO — LA PRESTACION SE DUPLICA
+### ============================================================
+
+### 6. Registrar el egreso por despido injustificado
+POST {{baseUrl}}/employee/{{employeeId}}/terminate
+Content-Type: application/json
+
+{
+  "termination_date": "2026-08-27",
+  "termination_type": "despido_injustificado",
+  "termination_reason": "Reduccion de personal sin causa imputable"
+}
+
+
+### 7. CLAVE — indemnizacion igual al monto de prestaciones
+# Espera un cuerpo donde:
+#   severanceAmount == indemnityAmount
+#   y ambos son el resultado del MAX del Art. 142.d
+#
+# Si indemnityAmount sale distinto de severanceAmount, o si se
+# calcula sobre via1/via2 por separado en vez de sobre el
+# seleccionado, el Art. 92 esta mal implementado.
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27
+Accept: application/json
+
+
+### 8. Verificar la duplicacion en el desglose
+# Espera DOS settlement_item distintos:
+#   - "Prestaciones sociales"  article "142.d"  salary_basis "integral"
+#   - "Indemnizacion Art. 92"  article "92"     salary_basis "integral"
+# con el MISMO monto cada uno.
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27&breakdown=true
+Accept: application/json
+
+
+### 9. La indemnizacion parte del monto SELECCIONADO
+# Si via1 = 40000 y via2 = 52000, el Art. 142.d elige 52000.
+# La indemnizacion debe ser 52000, no 40000.
+# Espera: indemnityAmount == max(via1Amount, via2Amount)
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27&explain=true
+Accept: application/json
+
+
+### ============================================================
+### CONTRASTE — MISMO EMPLEADO, CAUSAL DISTINTA
+### ============================================================
+
+### 10. Cambiar la causal a renuncia
+PATCH {{baseUrl}}/employee/{{employeeId}}/termination
+Content-Type: application/json
+
+{
+  "termination_type": "renuncia",
+  "termination_reason": "Renuncia voluntaria"
+}
+
+
+### 11. Sin indemnizacion, el total baja a la mitad
+# Espera: indemnityAmount = 0 y el subtotal se reduce en el monto
+#         de las prestaciones respecto al paso 7.
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27
+Accept: application/json
+
+
+### ============================================================
+### VALIDACIONES
+### ============================================================
+
+### 12. RECHAZO — egreso sin causal
+# La causal es obligatoria: determina la indemnizacion (Art. 92) y,
+# si es fallecimiento, el reparto entre herederos (Art. 145).
+# Espera: 400.
+POST {{baseUrl}}/employee/{{employeeId}}/terminate
+Content-Type: application/json
+
+{
+  "termination_date": "2026-08-27"
+}
+
+
+### 13. RECHAZO — fecha de egreso anterior al ingreso
+# Espera: 400 (constraint chk_employee_fechas_relacion).
+POST {{baseUrl}}/employee/{{employeeId}}/terminate
+Content-Type: application/json
+
+{
+  "termination_date": "2018-01-01",
+  "termination_type": "renuncia"
+}

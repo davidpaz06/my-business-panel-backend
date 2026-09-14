@@ -1,0 +1,166 @@
+### ============================================================
+### HR-VE-04 · Dias feriados y descanso (Arts. 120, 184, 188 LOTTT)
+### ============================================================
+### Que mide: el pago del dia feriado y el sobreprecio de trabajarlo.
+###
+### Formula (Art. 120):
+###   pago_feriado = salario_normal_diario              (el dia)
+###                + salario_normal_diario * 1.50       (la labor)
+###
+### Es decir: si trabaja un feriado cobra el dia MAS la jornada con
+### recargo del 50%. Diferencia importante frente al esquema de
+### Costa Rica que traia el sistema, donde trabajar un feriado
+### dentro de la jornada normal no generaba pago adicional.
+###
+### Descanso compensatorio (Art. 188):
+###   >= 4 h trabajadas -> 1 dia completo de salario + descanso
+###   <  4 h trabajadas -> 1/2 dia de salario + descanso
+###
+### Feriados (Art. 184): domingos; 1 enero; lunes y martes de
+### carnaval; Jueves y Viernes Santo; 1 mayo; 24, 25 y 31 de
+### diciembre; los de la Ley de Fiestas Nacionales; y hasta 3 al
+### anio declarados por Ejecutivo, estados o municipios.
+###
+### Ejecutar 00-setup.test.http primero.
+### ESTADO: Fase 2 del roadmap (submodulo journey).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@tenantId   = a57174b6-c757-4bb9-bae2-ea4e7ffa6088
+@branchId   = 8aa62c84-a07a-4ea5-a6df-523ab22089b0
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+
+### 1. Listar feriados del anio
+# El seed 003 carga 10 recurrentes + 4 moviles para 2026.
+# Espera: incluye 1 enero, 1 mayo, 19 abril, 24 junio, 5 julio,
+#         24 julio, 12 octubre, 24/25/31 diciembre.
+GET {{baseUrl}}/holidays?year=2026
+Accept: application/json
+
+
+### 2. Feriados de fecha movil
+# Carnaval y Semana Santa dependen de la fecha de Pascua y se
+# cargan por anio (is_recurring = false).
+# Espera: 4 registros para 2026 (16 y 17 feb, 2 y 3 abril).
+GET {{baseUrl}}/holidays?year=2026&recurring=false
+Accept: application/json
+
+
+### 3. Verificar si una fecha es feriado
+# Espera: { isHoliday: true, name: "Dia del Trabajador", article: "184" }
+GET {{baseUrl}}/holidays/check?date=2026-05-01
+Accept: application/json
+
+
+### 4. Los DOMINGOS son feriados por ley
+# No se siembran como filas: se resuelven por calculo de calendario.
+# 2026-05-03 es domingo.
+# Espera: { isHoliday: true, reason: "domingo (Art. 184)" }
+GET {{baseUrl}}/holidays/check?date=2026-05-03
+Accept: application/json
+
+
+### ============================================================
+### PAGO DEL FERIADO TRABAJADO (Art. 120)
+### ============================================================
+
+### 5. CLAVE — jornada completa en feriado
+# salario_normal_diario = 66.6667
+#   el dia            = 66.6667
+#   labor con recargo = 66.6667 * 1.50 = 100.0000
+#   total             = 166.6667
+#
+# Espera: 201 y el calculo devuelve amount = 166.6667
+# Con el esquema anterior (Costa Rica) esto pagaba 0 adicional.
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-05-01",
+  "kind": "feriado",
+  "hours": 8
+}
+
+
+### 6. Desglose del pago del feriado
+# Espera:
+#   { dayAmount: 66.6667, workAmount: 100.0000,
+#     total: 166.6667, article: "120", salaryBasis: "normal" }
+GET {{baseUrl}}/journey/holiday-pay/{{employeeId}}?date=2026-05-01
+Accept: application/json
+
+
+### ============================================================
+### DESCANSO COMPENSATORIO (Art. 188)
+### ============================================================
+
+### 7. Trabajo en dia de descanso >= 4 h
+# Espera: { salaryDays: 1, compensatoryRest: true }
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-05-10",
+  "kind": "descanso",
+  "hours": 6
+}
+
+
+### 8. Trabajo en dia de descanso < 4 h
+# Espera: { salaryDays: 0.5, compensatoryRest: true }
+POST {{baseUrl}}/overtime
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "branch_id": "{{branchId}}",
+  "work_date": "2026-05-17",
+  "kind": "descanso",
+  "hours": 3
+}
+
+
+### ============================================================
+### FERIADOS DECLARADOS — tope de 3 al anio (Art. 184.d)
+### ============================================================
+
+### 9. Declarar feriado municipal
+# Espera: 201.
+POST {{baseUrl}}/holidays
+Content-Type: application/json
+
+{
+  "holiday_name": "Fiestas patronales del municipio",
+  "date": "2026-06-13",
+  "holiday_year": 2026,
+  "is_recurring": false,
+  "source": "municipal"
+}
+
+
+### 10. RECHAZO — cuarto feriado declarado en el mismo anio
+# Cargar 3 declarados (ejecutivo/estadal/municipal) y pedir un
+# cuarto debe fallar.
+# Espera: 400 "Se alcanzo el tope de 3 feriados declarados por anio (Art. 184)"
+POST {{baseUrl}}/holidays
+Content-Type: application/json
+
+{
+  "holiday_name": "Feriado adicional fuera de tope",
+  "date": "2026-06-20",
+  "holiday_year": 2026,
+  "is_recurring": false,
+  "source": "municipal"
+}
+
+
+### 11. Los feriados de la ley NO cuentan para el tope
+# Solo cuentan los de origen ejecutivo/estadal/municipal.
+# Espera: declaredCount = 3, legalCount no afecta el tope.
+GET {{baseUrl}}/holidays/declared-count?year=2026
+Accept: application/json

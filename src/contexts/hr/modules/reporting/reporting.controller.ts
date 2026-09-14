@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ReportingService } from './reporting.service';
 import {
@@ -12,9 +12,11 @@ import {
   getFinancialKpisDoc,
   getTrialBalanceDoc,
 } from '@/docs/contexts/hr/reporting';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Reporting')
 @Controller('reporting')
+@UseGuards(AuthenticationGuard)
 export class ReportingController {
   constructor(private readonly reportingService: ReportingService) {}
 

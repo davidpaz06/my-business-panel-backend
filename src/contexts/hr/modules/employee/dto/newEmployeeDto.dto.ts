@@ -2,8 +2,10 @@ import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEmail,
+  IsIn,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
   ValidateNested,
@@ -12,27 +14,44 @@ import { ApiProperty } from '@nestjs/swagger';
 import { createEmployeeDoc } from '@/docs/contexts/hr/employee';
 
 export class ContractDto {
+  @IsOptional()
   @IsDateString()
-  start_date!: string;
+  start_date?: string;
 
+  @IsOptional()
   @IsDateString()
-  end_date!: string;
+  end_date?: string;
 
+  @IsOptional()
   @IsNumber()
-  hours!: number;
+  hours?: number;
 
+  @IsOptional()
   @IsNumber()
-  base_salary!: number;
+  base_salary?: number;
 
   @IsOptional()
   @IsNumber()
   duties_type_id?: number;
 
+  @IsOptional()
   @IsNumber()
-  turn_type!: number;
+  turn_type?: number;
 
+  @IsOptional()
   @IsNumber()
-  turn_id!: number;
+  turn_id?: number;
+
+  /** Tipo de jornada (Art. 173 LOTTT): diurna, nocturna, mixta. */
+  @IsOptional()
+  @IsIn(['diurna', 'nocturna', 'mixta'])
+  journey_type?: string;
+
+  /** Horas semanales pactadas. Validadas contra JOURNEY_LIMITS (Art. 173). */
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  weekly_hours?: number;
 }
 
 export class NewEmployeeDto {

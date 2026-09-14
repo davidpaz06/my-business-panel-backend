@@ -10,6 +10,7 @@ import { hrQueries } from '@hr/hr.queries';
 import { NewEmployeeDto, NewSingleEmployeeDto } from './dto/newEmployeeDto.dto';
 import { CreateFullEmployeeError } from '@/common/errors/create_full_employee.error';
 import { UpdateEmployeeDto } from './dto/updateEmployee.dto';
+import { TerminateEmployeeDto, UpdateTerminationDto } from './dto/terminateEmployee.dto';
 
 const { employee } = hrQueries;
 
@@ -219,6 +220,46 @@ export class EmployeeService {
 
     return {
       message: `Employee with id: ${employee_id} deactivated successfully.`,
+    };
+  }
+
+  /** Registra el egreso del empleado (Arts. 92, 142.f, 145 LOTTT). */
+  async terminate(employee_id: string, data: TerminateEmployeeDto) {
+    const existingEmp = await this.db.query(employee.getById, [employee_id]);
+    if (existingEmp.rows.length === 0) return new Error('Employee not found.');
+
+    const result = await this.db.query(employee.terminate, [
+      data.termination_date,
+      data.termination_type,
+      data.termination_reason ?? null,
+      employee_id,
+    ]);
+
+    return {
+      message: 'Egreso registrado correctamente',
+      employee: result.rows[0],
+    };
+  }
+
+  async updateTermination(employee_id: string, data: UpdateTerminationDto) {
+    const existing = await this.db.query(employee.getTerminationInfo, [employee_id]);
+    if (!existing.rows.length) return new Error('Employee not found.');
+
+    const terminationDate = existing.rows[0].termination_date;
+    if (!terminationDate) {
+      return new Error('El empleado no tiene un egreso registrado.');
+    }
+
+    const result = await this.db.query(employee.terminate, [
+      terminationDate,
+      data.termination_type,
+      data.termination_reason ?? null,
+      employee_id,
+    ]);
+
+    return {
+      message: 'Causal de egreso actualizada',
+      employee: result.rows[0],
     };
   }
 

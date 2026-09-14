@@ -8,12 +8,11 @@ import { StrategyContext } from './service/strategy.context';
 import { FixedStrategy } from './strategies/fixed.strategy';
 import { PercentageStrategy } from './strategies/percentage.strategy';
 import {
-  HolidayStrategy,
+  HolidayWorkedStrategy,
   IncapacityDeductionStrategy,
   IncapacityStrategy,
-  ISRDeduction,
+  NightSurchargeStrategy,
   OvertimeStrategy,
-  VacationsStrategy,
 } from './strategies/formula.strategy';
 import { AccountingModule } from '../../../finances/modules/accounting/accounting.module';
 
@@ -27,10 +26,9 @@ import { AccountingModule } from '../../../finances/modules/accounting/accountin
     FixedStrategy,
     PercentageStrategy,
     EmployeeService,
+    NightSurchargeStrategy,
     OvertimeStrategy,
-    VacationsStrategy,
-    HolidayStrategy,
-    ISRDeduction,
+    HolidayWorkedStrategy,
     IncapacityStrategy,
     IncapacityDeductionStrategy,
   ],

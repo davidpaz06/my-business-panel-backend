@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PaysheetService } from './paysheet.service';
 import {
@@ -8,9 +8,11 @@ import {
   getPaysheetByIdDoc,
   getPaysheetDetailsDoc,
 } from '@/docs/contexts/hr/paysheet';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Paysheet')
 @Controller('paysheet')
+@UseGuards(AuthenticationGuard)
 export class PaysheetController {
   constructor(private readonly paysheetService: PaysheetService) {}
 

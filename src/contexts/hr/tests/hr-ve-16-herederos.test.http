@@ -1,0 +1,216 @@
+### ============================================================
+### HR-VE-16 · Herederos / beneficiarios (Art. 145 LOTTT)
+### ============================================================
+### Que mide: como se distribuyen las prestaciones cuando el
+### trabajador fallece.
+###
+### REGLA (Art. 145): las prestaciones se distribuyen en PARTES
+### IGUALES entre hijos, conyuge o pareja estable, padres y nietos
+### huerfanos, SIN PREFERENCIA entre ellos.
+###
+### Dos consecuencias para el software:
+###   1. El divisor NO se conoce de antemano: depende de cuantos
+###      reclamantes VALIDOS se presenten dentro de los 3 MESES
+###      siguientes. Hay que registrar cada reclamo con su fecha y
+###      su validacion, y calcular el reparto al cerrar la ventana.
+###   2. SIN PREFERENCIA significa que un hijo y un abuelo reclaman
+###      exactamente lo mismo. El parentesco sirve para ACREDITAR el
+###      derecho, no para ordenar prioridades. Un reparto que
+###      privilegie al conyuge sobre los padres es incorrecto.
+###
+### ESTADO: Fase 3 del roadmap (submodulo settlement).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId    = e366b534-4320-42e6-a5db-6e9290cc4969
+@settlementId  = 00000000-0000-0000-0000-000000000000
+@beneficiaryId = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Registrar el egreso por fallecimiento
+# Espera: 201. La causal activa el flujo del Art. 145.
+POST {{baseUrl}}/employee/{{employeeId}}/terminate
+Content-Type: application/json
+
+{
+  "termination_date": "2026-08-27",
+  "termination_type": "fallecimiento",
+  "termination_reason": "Fallecimiento del trabajador"
+}
+
+
+### ============================================================
+### REGISTRO DE RECLAMANTES
+### ============================================================
+
+### 2. Hijo
+POST {{baseUrl}}/beneficiaries
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "full_name": "Jose Rodriguez",
+  "doc_number": "V-25111222",
+  "relationship": "hijo",
+  "claim_date": "2026-09-05"
+}
+
+
+### 3. Conyuge
+POST {{baseUrl}}/beneficiaries
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "full_name": "Ana Perez",
+  "doc_number": "V-14555666",
+  "relationship": "conyuge",
+  "claim_date": "2026-09-05"
+}
+
+
+### 4. Madre
+POST {{baseUrl}}/beneficiaries
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "full_name": "Carmen Rodriguez",
+  "doc_number": "V-04111000",
+  "relationship": "madre",
+  "claim_date": "2026-09-20"
+}
+
+
+### 5. Nieto huerfano
+POST {{baseUrl}}/beneficiaries
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "full_name": "Luis Rodriguez",
+  "doc_number": "V-30888999",
+  "relationship": "nieto_huerfano",
+  "claim_date": "2026-10-01"
+}
+
+
+### 6. RECHAZO — parentesco no contemplado
+# El Art. 145 enumera los beneficiarios. Un hermano no esta incluido.
+# Espera: 400.
+POST {{baseUrl}}/beneficiaries
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "full_name": "Pedro Rodriguez",
+  "doc_number": "V-16777888",
+  "relationship": "hermano",
+  "claim_date": "2026-09-10"
+}
+
+
+### 7. RECHAZO — reclamante duplicado
+# Espera: 409 (constraint uq_employee_beneficiary_doc).
+POST {{baseUrl}}/beneficiaries
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "full_name": "Jose Rodriguez",
+  "doc_number": "V-25111222",
+  "relationship": "hijo",
+  "claim_date": "2026-09-15"
+}
+
+
+### ============================================================
+### VALIDACION Y VENTANA DE 3 MESES
+### ============================================================
+
+### 8. Validar el parentesco de un reclamante
+# Solo los validados entran en el divisor.
+POST {{baseUrl}}/beneficiaries/{{beneficiaryId}}/validate
+Content-Type: application/json
+
+{
+  "validated_at": "2026-09-10"
+}
+
+
+### 9. Reclamo FUERA de la ventana de 3 meses
+# Fallecimiento 2026-08-27, ventana hasta 2026-11-27.
+# Espera: 400 o registro marcado fuera de plazo.
+POST {{baseUrl}}/beneficiaries
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "full_name": "Reclamante Tardio",
+  "doc_number": "V-19222333",
+  "relationship": "hijo",
+  "claim_date": "2026-12-15"
+}
+
+
+### 10. Estado de la ventana
+# Espera: { deadline: "2026-11-27", open: true/false,
+#           validatedClaimants, pendingClaimants }
+GET {{baseUrl}}/beneficiaries/{{employeeId}}/claim-window
+Accept: application/json
+
+
+### ============================================================
+### REPARTO EN PARTES IGUALES
+### ============================================================
+
+### 11. CLAVE — division exacta entre los validados
+# Con 4 beneficiarios validados y prestaciones de 100000.00:
+#   share_percentage = 100 / 4 = 25.0000 cada uno
+#   share_amount     = 25000.00 cada uno
+#
+# Espera: los CUATRO con el mismo porcentaje y el mismo monto.
+# Si el conyuge recibe mas que la madre, se esta aplicando una
+# prelacion que el Art. 145 no contempla.
+POST {{baseUrl}}/beneficiaries/{{employeeId}}/distribute
+Content-Type: application/json
+
+{
+  "settlement_id": "{{settlementId}}"
+}
+
+
+### 12. Verificar el reparto
+# Espera: sum(share_amount) == total de la liquidacion, y todos los
+#         share_percentage iguales.
+GET {{baseUrl}}/beneficiaries/{{employeeId}}
+Accept: application/json
+
+
+### 13. El divisor cambia si se valida otro reclamante
+# Al validar un quinto, el reparto pasa de 25% a 20% cada uno.
+# Espera: recalculo con share_percentage = 20.0000
+POST {{baseUrl}}/beneficiaries/{{employeeId}}/distribute
+Content-Type: application/json
+
+{
+  "settlement_id": "{{settlementId}}",
+  "recalculate": true
+}
+
+
+### 14. Los NO validados no entran en el divisor
+# Espera: un reclamante con validated = false no recibe cuota ni
+#         reduce la de los demas.
+GET {{baseUrl}}/beneficiaries/{{employeeId}}?onlyValidated=false
+Accept: application/json
+
+
+### 15. RECHAZO — repartir sin reclamantes validados
+# Espera: 400. No hay divisor posible.
+POST {{baseUrl}}/beneficiaries/{{employeeId}}/distribute
+Content-Type: application/json
+
+{
+  "settlement_id": "{{settlementId}}"
+}

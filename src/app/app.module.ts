@@ -68,6 +68,17 @@ import { ReportingModule } from '@/contexts/hr/modules/reporting/reporting.modul
 import { PaysheetModule } from '@/contexts/hr/modules/paysheet/paysheet.module';
 import { PayrollMovementsModule } from '@/contexts/hr/modules/payroll_movements/payroll-movements.module';
 import { IncapacityModule } from '@/contexts/hr/modules/incapacity/incapacity.module';
+import { ParametersModule } from '@/contexts/hr/modules/parameters/parameters.module';
+import { SalaryModule } from '@/contexts/hr/modules/salary/salary.module';
+import { HolidaysModule } from '@/contexts/hr/modules/holidays/holidays.module';
+import { JourneyModule } from '@/contexts/hr/modules/journey/journey.module';
+import { MoraModule } from '@/contexts/hr/modules/mora/mora.module';
+import { SeveranceModule } from '@/contexts/hr/modules/severance/severance.module';
+import { VacationsModule } from '@/contexts/hr/modules/vacations/vacations.module';
+import { ProfitSharingModule } from '@/contexts/hr/modules/profit-sharing/profit-sharing.module';
+import { DeductionsModule } from '@/contexts/hr/modules/deductions/deductions.module';
+import { BeneficiariesModule } from '@/contexts/hr/modules/beneficiaries/beneficiaries.module';
+import { SettlementModule } from '@/contexts/hr/modules/settlement/settlement.module';
 import { SuspentionModule } from '@/contexts/hr/modules/suspention/suspention.module';
 import { TurnsModule } from '@/contexts/hr/modules/turns/turns.module';
 import { TardinessModule } from '@/contexts/hr/modules/tardiness/tardiness.module';
@@ -124,6 +135,17 @@ import { IvaModule } from '@/contexts/finances/modules/iva/iva.module';
     ContractModule,
     ConceptModule,
     DutiesTypeModule,
+    ParametersModule,
+    SalaryModule,
+    HolidaysModule,
+    JourneyModule,
+    MoraModule,
+    SeveranceModule,
+    VacationsModule,
+    ProfitSharingModule,
+    DeductionsModule,
+    BeneficiariesModule,
+    SettlementModule,
     PayrollMovementsModule,
     PayrollModule,
     PaysheetModule,

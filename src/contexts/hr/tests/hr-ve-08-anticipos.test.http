@@ -1,0 +1,172 @@
+### ============================================================
+### HR-VE-08 · Anticipo de prestaciones (Art. 144 LOTTT)
+### ============================================================
+### Que mide: el adelanto que el trabajador puede solicitar sobre la
+### garantia ya depositada.
+###
+### Tope: hasta el 75% de lo depositado como garantia.
+###
+### Causales TAXATIVAS (no admite otras):
+###   - construccion, adquisicion o mejora de vivienda
+###   - liberacion de hipoteca
+###   - educacion (propia o de la familia)
+###   - gastos medicos (propios o de la familia)
+###
+### Dos razones por las que cada anticipo debe quedar registrado:
+###   1. El tope del 75% se calcula contra el saldo MENOS los
+###      anticipos ya otorgados. Sin historico, el trabajador podria
+###      retirar el 75% repetidamente.
+###   2. Los anticipos se RESTAN en la liquidacion final. Un
+###      anticipo no registrado se paga dos veces.
+###
+### Ejecutar 00-setup.test.http y hr-ve-05 primero (necesita
+### depositos generados).
+### ESTADO: Fase 2 del roadmap (submodulo severance).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+@advanceId  = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Consultar el saldo disponible
+# saldo = depositos realizados + intereses capitalizados
+#         - anticipos aprobados
+# maximo_anticipo = saldo * 0.75
+# Espera: { guaranteeBalance, maxAdvance, article: "144" }
+GET {{baseUrl}}/severance/advances/{{employeeId}}/available
+Accept: application/json
+
+
+### 2. Verificar el parametro del tope
+# Espera: param_value = 0.750000
+GET {{baseUrl}}/payroll-parameters/resolve/tope_anticipo_prestaciones?date=2026-08-27
+Accept: application/json
+
+
+### ============================================================
+### CAUSALES VALIDAS (Art. 144)
+### ============================================================
+
+### 3. Anticipo por vivienda
+# Espera: 201, status = "pendiente",
+#         guarantee_balance_at_request registrado para auditoria.
+POST {{baseUrl}}/severance/advances
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "requested_amount": 5000.00,
+  "reason": "vivienda",
+  "reason_detail": "Mejora de vivienda principal - ampliacion"
+}
+
+
+### 4. Anticipo por gastos medicos
+POST {{baseUrl}}/severance/advances
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "requested_amount": 2000.00,
+  "reason": "salud",
+  "reason_detail": "Intervencion quirurgica de familiar directo"
+}
+
+
+### 5. Anticipo por educacion
+POST {{baseUrl}}/severance/advances
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "requested_amount": 1500.00,
+  "reason": "educacion",
+  "reason_detail": "Matricula universitaria"
+}
+
+
+### 6. RECHAZO — causal no contemplada
+# El Art. 144 es taxativo. Un anticipo por otra causa es improcedente.
+# Espera: 400 con las causales validas en el mensaje.
+POST {{baseUrl}}/severance/advances
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "requested_amount": 1000.00,
+  "reason": "vacaciones",
+  "reason_detail": "Viaje personal"
+}
+
+
+### ============================================================
+### TOPE DEL 75%
+### ============================================================
+
+### 7. RECHAZO — solicitud por encima del 75%
+# Espera: 400 "Anticipo maximo 75% de la garantia (Art. 144)"
+# El mensaje debe incluir el maximo calculado.
+POST {{baseUrl}}/severance/advances
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "requested_amount": 999999.00,
+  "reason": "vivienda",
+  "reason_detail": "Solicitud fuera de tope"
+}
+
+
+### 8. Aprobar un anticipo
+# approved_amount puede diferir del solicitado; es el que se
+# descuenta en la liquidacion.
+POST {{baseUrl}}/severance/advances/{{advanceId}}/approve
+Content-Type: application/json
+
+{
+  "approved_amount": 4500.00,
+  "resolution_date": "2026-08-20"
+}
+
+
+### 9. CLAVE — el tope se recalcula contra el saldo restante
+# Tras aprobar un anticipo, el nuevo maximo debe ser menor.
+# Si el maximo no bajo, el descuento de anticipos previos no
+# esta implementado y el trabajador podria retirar de mas.
+# Espera: maxAdvance menor que en el paso 1.
+GET {{baseUrl}}/severance/advances/{{employeeId}}/available
+Accept: application/json
+
+
+### 10. Rechazar un anticipo
+POST {{baseUrl}}/severance/advances/{{advanceId}}/reject
+Content-Type: application/json
+
+{
+  "resolution_date": "2026-08-21",
+  "reason_detail": "Documentacion incompleta"
+}
+
+
+### 11. Un anticipo RECHAZADO no consume saldo
+# Espera: maxAdvance sin cambios respecto al paso 9.
+GET {{baseUrl}}/severance/advances/{{employeeId}}/available
+Accept: application/json
+
+
+### 12. Historial de anticipos
+# Espera: los tres estados (pendiente, aprobado, rechazado).
+GET {{baseUrl}}/severance/advances/{{employeeId}}
+Accept: application/json
+
+
+### ============================================================
+### INTEGRACION CON LA LIQUIDACION
+### ============================================================
+
+### 13. Los anticipos aprobados se restan en la liquidacion
+# Espera: advances_deducted = suma de approved_amount aprobados,
+#         y un settlement_item con monto NEGATIVO y article "144".
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-12-31
+Accept: application/json

@@ -1,10 +1,6 @@
-import { IsDateString, IsNotEmpty, IsUUID } from 'class-validator';
+import { IsDateString, IsInt, IsNotEmpty, IsUUID } from 'class-validator';
 
 export class CreatePaysheetDto {
-  @IsUUID()
-  @IsNotEmpty()
-  tenantId!: string;
-
   @IsUUID()
   @IsNotEmpty()
   branchId!: string;
@@ -23,10 +19,6 @@ export class ProcessPaysheetDto {
   @IsNotEmpty()
   branch_id!: string;
 
-  @IsUUID()
-  @IsNotEmpty()
-  tenant_id!: string;
-
   @IsDateString()
   @IsNotEmpty()
   period_start!: string;
@@ -34,4 +26,8 @@ export class ProcessPaysheetDto {
   @IsDateString()
   @IsNotEmpty()
   period_end!: string;
+
+  /** general_schema.payment_method.payment_method_id de esta corrida. */
+  @IsInt()
+  payment_method_id!: number;
 }

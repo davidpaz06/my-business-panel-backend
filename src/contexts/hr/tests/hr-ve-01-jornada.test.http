@@ -1,0 +1,117 @@
+### ============================================================
+### HR-VE-01 · Limites de jornada (Art. 173 LOTTT)
+### ============================================================
+### Que mide: a partir de que punto una hora deja de ser ordinaria
+### y pasa a ser extraordinaria. Es el insumo de HR-VE-02 y HR-VE-03.
+###
+### Limites legales:
+###   Diurna   (5:00 a 19:00)   8 h/dia    40 h/semana
+###   Nocturna (19:00 a 5:00)   7 h/dia    35 h/semana
+###   Mixta    (combina ambas)  7.5 h/dia  37.5 h/semana
+###
+### Cambio frente a Costa Rica: la semana diurna baja de 48 h a 40 h
+### y se establecen 2 dias de descanso.
+###
+### Ejecutar 00-setup.test.http primero.
+### ESTADO: Fase 2 del roadmap (submodulo journey).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@tenantId   = a57174b6-c757-4bb9-bae2-ea4e7ffa6088
+@branchId   = 8aa62c84-a07a-4ea5-a6df-523ab22089b0
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+@contractId = 78119672-ab56-4b29-acf2-fcf84674e9c9
+
+
+### 1. Consultar los limites aplicables al contrato
+# El contrato de setup es jornada diurna.
+# Espera: { journeyType: "diurna", maxDaily: 8, maxWeekly: 40 }
+GET {{baseUrl}}/journey/limits/{{contractId}}
+Accept: application/json
+
+
+### 2. Limites de jornada nocturna
+# Espera: { journeyType: "nocturna", maxDaily: 7, maxWeekly: 35 }
+GET {{baseUrl}}/journey/limits?journeyType=nocturna
+Accept: application/json
+
+
+### 3. Limites de jornada mixta
+# Espera: { journeyType: "mixta", maxDaily: 7.5, maxWeekly: 37.5 }
+GET {{baseUrl}}/journey/limits?journeyType=mixta
+Accept: application/json
+
+
+### 4. REGLA CLAVE — mixta con mas de 4 h nocturnas se reputa nocturna
+# Art. 173: si el periodo nocturno de una jornada mixta supera las
+# 4 horas, la jornada se considera NOCTURNA EN SU TOTALIDAD.
+# Consecuencia: el limite baja de 7.5 h a 7 h y toda la jornada
+# genera el recargo del 30% (Art. 117), no solo el tramo nocturno.
+#
+# Jornada 14:00-22:00 = 5 h diurnas + 3 h nocturnas -> sigue mixta.
+# Espera: { effectiveJourney: "mixta", maxDaily: 7.5 }
+POST {{baseUrl}}/journey/classify
+Content-Type: application/json
+
+{
+  "start_time": "14:00",
+  "end_time": "22:00"
+}
+
+
+### 5. Mixta que SI se convierte en nocturna
+# Jornada 16:00-00:30 = 3 h diurnas + 5.5 h nocturnas.
+# El tramo nocturno supera 4 h -> toda la jornada es nocturna.
+# Espera: { effectiveJourney: "nocturna", maxDaily: 7,
+#           reason: "periodo nocturno mayor a 4 horas (Art. 173)" }
+POST {{baseUrl}}/journey/classify
+Content-Type: application/json
+
+{
+  "start_time": "16:00",
+  "end_time": "00:30"
+}
+
+
+### 6. RECHAZO — contrato que excede el maximo semanal
+# Espera: 400. Una jornada diurna no puede pactar 48 h semanales
+# (ese era el limite de Costa Rica, no el venezolano).
+PATCH {{baseUrl}}/contract/{{contractId}}
+Content-Type: application/json
+
+{
+  "journey_type": "diurna",
+  "weekly_hours": 48
+}
+
+
+### 7. RECHAZO — jornada nocturna con 40 h semanales
+# Espera: 400. El maximo nocturno es 35 h/semana.
+PATCH {{baseUrl}}/contract/{{contractId}}
+Content-Type: application/json
+
+{
+  "journey_type": "nocturna",
+  "weekly_hours": 40
+}
+
+
+### ============================================================
+### REGIMENES DE EXCEPCION (Arts. 175, 176)
+### ============================================================
+
+### 8. Trabajador de direccion / vigilancia / labores intermitentes
+# Art. 175: no sujetos a los limites ordinarios, pero la jornada
+# diaria no puede exceder 11 h y el promedio en 8 semanas no puede
+# superar 40 h/semana, con 2 dias de descanso.
+# Espera: { exempt: true, maxDaily: 11, avgWeeklyOver8Weeks: 40 }
+GET {{baseUrl}}/journey/limits?regime=direccion
+Accept: application/json
+
+
+### 9. Trabajo continuo por turnos
+# Art. 176: promedio maximo de 42 h/semana en 8 semanas. Las
+# semanas de 6 dias se compensan con 1 dia adicional de vacaciones.
+# Espera: { avgWeeklyOver8Weeks: 42, compensatoryVacationDay: true }
+GET {{baseUrl}}/journey/limits?regime=turnos_continuos
+Accept: application/json
