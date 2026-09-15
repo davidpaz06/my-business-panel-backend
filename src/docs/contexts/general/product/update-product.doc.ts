@@ -9,10 +9,10 @@ export const updateProductDoc = {
       description: 'New display name for the product variant. Optional.',
       example: 'Blue T-Shirt L',
     },
-    cabys_code: {
+    product_id: {
       description:
-        'New CABYS code (Costa Rican product classification). Optional.',
-      example: '1234567890123',
+        'New product catalog entry to link this variant to. Optional.',
+      example: '123e4567-e89b-12d3-a456-426614174111',
     },
     unit_price: {
       description: 'New unit price in local currency. Optional.',

@@ -1,0 +1,211 @@
+### ============================================================
+### HR-VE-17 · Limite a los descuentos (Arts. 152, 154 LOTTT)
+### ============================================================
+### Que mide: cuanto se le puede descontar legalmente al trabajador.
+### El salario esta protegido: no se descuenta libremente.
+###
+### TOPES (Art. 154) — son DOS y dependen del momento:
+###   Durante la relacion: las deudas del trabajador con el patrono
+###     solo son amortizables por cantidades que NO excedan 1/3 (una
+###     tercera parte) de una semana o un mes de trabajo, segun el
+###     caso.
+###   Al terminar la relacion: el patrono puede compensar el saldo
+###     pendiente hasta el 50% del credito a favor del trabajador.
+###
+### INEMBARGABILIDAD (Art. 152): el salario y las prestaciones son
+### inembargables SALVO por pension alimentaria. Por eso la pension
+### alimentaria es una categoria aparte y NO esta sujeta a los topes
+### ordinarios.
+###
+### Recordar tambien: prohibicion de comisiones bancarias sobre
+### cuentas nomina (Art. 102).
+###
+### ESTADO: Fase 3 del roadmap (submodulo deductions).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId   = e366b534-4320-42e6-a5db-6e9290cc4969
+@deductionId  = 00000000-0000-0000-0000-000000000000
+@settlementId = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Verificar los parametros de tope
+# Espera: tope_descuento_periodo = 0.333333
+GET {{baseUrl}}/payroll-parameters/resolve/tope_descuento_periodo?date=2026-08-27
+Accept: application/json
+
+
+### 2. Y el tope de compensacion final
+# Espera: tope_compensacion_liquidacion = 0.500000
+GET {{baseUrl}}/payroll-parameters/resolve/tope_compensacion_liquidacion?date=2026-08-27
+Accept: application/json
+
+
+### ============================================================
+### TOPE DE 1/3 DURANTE LA RELACION
+### ============================================================
+
+### 3. Registrar una deuda del trabajador con el patrono
+# Salario mensual 2000.00 -> tope por periodo = 666.6667
+# Cuota de 500.00 esta dentro del limite.
+# Espera: 201.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "deuda_patrono",
+  "description": "Prestamo para reparacion de vehiculo",
+  "total_amount": 5000.00,
+  "installment_amount": 500.00,
+  "start_date": "2026-08-01"
+}
+
+
+### 4. CLAVE — RECHAZO por exceder 1/3 del periodo
+# Salario 2000.00, cuota solicitada 900.00 > 666.6667.
+# Espera: 400 "Descuento excede 1/3 del periodo (Art. 154)"
+# El mensaje debe incluir el tope calculado.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "deuda_patrono",
+  "description": "Prestamo excesivo",
+  "total_amount": 9000.00,
+  "installment_amount": 900.00,
+  "start_date": "2026-08-01"
+}
+
+
+### 5. Cuota exactamente en el limite -> se acepta
+# 2000 / 3 = 666.6667 exacto.
+# Espera: 201.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "deuda_patrono",
+  "description": "Prestamo en el limite",
+  "total_amount": 6666.67,
+  "installment_amount": 666.6667,
+  "start_date": "2026-08-01"
+}
+
+
+### 6. CLAVE — el tope aplica al ACUMULADO, no a cada deuda
+# Con una cuota vigente de 500.00, una segunda de 200.00 suma
+# 700.00 y supera el tercio (666.6667).
+# Espera: 400. Si se acepta, el tope se esta validando deuda por
+# deuda en vez de sobre el total del periodo.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "deuda_patrono",
+  "description": "Segunda deuda que rompe el acumulado",
+  "total_amount": 2000.00,
+  "installment_amount": 200.00,
+  "start_date": "2026-08-01"
+}
+
+
+### 7. Consultar el margen disponible
+# Espera: { periodSalary, maxDeduction, currentlyApplied, available }
+GET {{baseUrl}}/deductions/{{employeeId}}/available-margin?date=2026-08-27
+Accept: application/json
+
+
+### 8. El tope se recalcula con el salario vigente
+# Tras un aumento, el tercio sube. La validacion debe resolver el
+# salario a la fecha, no usar un valor fijo.
+GET {{baseUrl}}/deductions/{{employeeId}}/available-margin?date=2025-06-01
+Accept: application/json
+
+
+### ============================================================
+### PENSION ALIMENTARIA — EXCEPCION (Art. 152)
+### ============================================================
+
+### 9. CLAVE — la alimentaria NO esta sujeta al tope de 1/3
+# Unica excepcion a la inembargabilidad del salario.
+# Espera: 201 aunque supere el tercio.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "alimentaria",
+  "description": "Pension alimentaria por orden judicial",
+  "total_amount": 12000.00,
+  "installment_amount": 900.00,
+  "authorized": true,
+  "authorization_date": "2026-07-15",
+  "authorization_ref": "Expediente judicial 2026-4471",
+  "start_date": "2026-08-01"
+}
+
+
+### 10. La alimentaria no consume el margen ordinario
+# Espera: currentlyApplied excluye la pension alimentaria.
+GET {{baseUrl}}/deductions/{{employeeId}}/available-margin?date=2026-08-27
+Accept: application/json
+
+
+### ============================================================
+### COMPENSACION EN LA LIQUIDACION — TOPE 50%
+### ============================================================
+
+### 11. Saldo pendiente al terminar la relacion
+# Espera: outstanding_balance de las deudas activas.
+GET {{baseUrl}}/deductions/{{employeeId}}?active=true
+Accept: application/json
+
+
+### 12. CLAVE — compensacion limitada al 50% del credito
+# Si el credito a favor es 100000.00 y la deuda pendiente 70000.00,
+# solo se pueden compensar 50000.00. El resto queda como saldo
+# civil, no se descuenta de la liquidacion.
+#
+# Espera: { creditInFavor: 100000, outstanding: 70000,
+#           maxCompensation: 50000, compensated: 50000,
+#           remainingDebt: 20000, article: "154" }
+GET {{baseUrl}}/deductions/{{employeeId}}/settlement-compensation?settlementId={{settlementId}}
+Accept: application/json
+
+
+### 13. Deuda menor al 50% se compensa completa
+# Deuda 30000.00 sobre credito 100000.00 -> se compensa todo.
+# Espera: compensated = 30000, remainingDebt = 0.
+GET {{baseUrl}}/deductions/{{employeeId}}/settlement-compensation?settlementId={{settlementId}}&scenario=small-debt
+Accept: application/json
+
+
+### 14. Aparece como renglon NEGATIVO en la liquidacion
+# Espera: settlement_item con article "154" y amount < 0.
+GET {{baseUrl}}/settlement/preview/{{employeeId}}?endDate=2026-08-27&breakdown=true
+Accept: application/json
+
+
+### 15. Registrar el pago de una cuota
+# Debe reducir outstanding_balance.
+POST {{baseUrl}}/deductions/{{deductionId}}/apply
+Content-Type: application/json
+
+{
+  "amount": 500.00,
+  "applied_at": "2026-08-31"
+}
+
+
+### 16. RECHAZO — saldo mayor al total de la deuda
+# Espera: 400 (constraint chk_employee_deduction_balance).
+PATCH {{baseUrl}}/deductions/{{deductionId}}
+Content-Type: application/json
+
+{
+  "outstanding_balance": 99999.00
+}

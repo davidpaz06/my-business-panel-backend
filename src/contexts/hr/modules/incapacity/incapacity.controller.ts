@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { IncapacityService } from './incapacity.service';
 import {
@@ -12,9 +20,11 @@ import {
   updateIncapacityDoc,
   closeIncapacityDoc,
 } from '@/docs/contexts/hr/incapacity';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Incapacity')
 @Controller('incapacity')
+@UseGuards(AuthenticationGuard)
 export class IncapacityController {
   constructor(private readonly incService: IncapacityService) {}
 

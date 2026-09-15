@@ -27,7 +27,7 @@ export const loyaltyQueries = {
   // Crecimiento del programa: puntos otorgados vs canjeados por bucket de tiempo,
   // filtrables por sucursal. Se toman de las tablas realmente pobladas en el flujo
   // de venta (el ledger score_transaction no se escribe en este flujo):
-  //   - otorgados: digital_sale_invoice.points_accumulated (puntos generados en la venta)
+  //   - otorgados: invoice.points_accumulated (puntos generados en la venta)
   //   - canjeados: customer_payment.points_redeemed (pagos con puntos)
   // Ambas se unen a la venta para obtener la sucursal y aislar por tenant.
   // $1 = tenant_id; $2 = bucket_unit (text); $3 = range_start (timestamp);
@@ -37,7 +37,7 @@ export const loyaltyQueries = {
       SELECT
         date_trunc($2, dsi.invoiced_at) AS bucket_start,
         SUM(dsi.points_accumulated)     AS points
-      FROM pos_schema.digital_sale_invoice dsi
+      FROM pos_schema.invoice dsi
       INNER JOIN pos_schema.sale s ON s.sale_id = dsi.sale_id
       INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
       WHERE b.tenant_id = $1

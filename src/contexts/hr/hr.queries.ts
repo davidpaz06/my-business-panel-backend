@@ -14,9 +14,11 @@ export const hrQueryDefs = {
         base_salary = COALESCE($4, base_salary),
         duties_type_id = COALESCE($5, duties_type_id),
         turn_type = COALESCE($6, turn_type),
-        turn_id = COALESCE($7, turn_id)
+        turn_id = COALESCE($7, turn_id),
+        journey_type = COALESCE($9, journey_type),
+        weekly_hours = COALESCE($10, weekly_hours)
       WHERE contract_id = $8
-      RETURNING contract_id
+      RETURNING contract_id, journey_type, weekly_hours
     `,
     getSchedule: `
     SELECT * FROM hr_schema.payment_schedule
@@ -152,6 +154,77 @@ export const hrQueryDefs = {
       $18::integer
     ) AS employee_id
   `,
+    getTenantId: `
+      SELECT tenant_id FROM hr_schema.employee WHERE employee_id = $1 LIMIT 1
+    `,
+    getForSalary: `
+      SELECT e.employee_id, e.tenant_id, e.hire_date::text AS hire_date, c.journey_type, c.weekly_hours
+      FROM hr_schema.employee e
+      INNER JOIN hr_schema.contract c USING(contract_id)
+      WHERE e.employee_id = $1 LIMIT 1
+    `,
+    terminate: `
+      UPDATE hr_schema.employee
+      SET termination_date = $1, termination_type = $2, termination_reason = $3
+      WHERE employee_id = $4
+      RETURNING employee_id, tenant_id, hire_date::text AS hire_date, termination_date::text AS termination_date, termination_type, termination_reason
+    `,
+    listActiveForTenant: `
+      SELECT employee_id, hire_date::text AS hire_date
+      FROM hr_schema.employee
+      WHERE tenant_id = $1 AND is_active = true
+    `,
+    getTerminationInfo: `
+      SELECT employee_id, tenant_id, hire_date::text AS hire_date,
+        termination_date::text AS termination_date, termination_type, termination_reason
+      FROM hr_schema.employee WHERE employee_id = $1 LIMIT 1
+    `,
+  },
+
+  payrollParameters: {
+    listByTenant: `
+      SELECT parameter_id, tenant_id, param_key, param_value, valid_from, valid_to, source, created_at
+      FROM hr_schema.payroll_parameters
+      WHERE tenant_id = $1
+      ORDER BY param_key ASC, valid_from DESC
+    `,
+    resolve: `
+      SELECT param_value FROM hr_schema.payroll_parameters
+      WHERE tenant_id = $1 AND param_key = $2
+        AND valid_from <= $3 AND (valid_to IS NULL OR valid_to >= $3)
+      ORDER BY valid_from DESC LIMIT 1
+    `,
+    create: `
+      INSERT INTO hr_schema.payroll_parameters (tenant_id, param_key, param_value, valid_from, source)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING parameter_id, tenant_id, param_key, param_value, valid_from, valid_to, source, created_at
+    `,
+    listByKey: `
+      SELECT param_value, valid_from, valid_to
+      FROM hr_schema.payroll_parameters
+      WHERE tenant_id = $1 AND param_key = $2
+      ORDER BY valid_from ASC
+    `,
+  },
+
+  salaryHistory: {
+    listByEmployee: `
+      SELECT salary_history_id, employee_id, tenant_id, monthly_salary, valid_from, valid_to, reason, created_at
+      FROM hr_schema.salary_history
+      WHERE employee_id = $1
+      ORDER BY valid_from DESC
+    `,
+    resolve: `
+      SELECT monthly_salary FROM hr_schema.salary_history
+      WHERE employee_id = $1
+        AND valid_from <= $2 AND (valid_to IS NULL OR valid_to >= $2)
+      ORDER BY valid_from DESC LIMIT 1
+    `,
+    create: `
+      INSERT INTO hr_schema.salary_history (employee_id, tenant_id, monthly_salary, valid_from, reason)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING salary_history_id, employee_id, tenant_id, monthly_salary, valid_from, valid_to, reason, created_at
+    `,
   },
 
   clocking: {
@@ -262,7 +335,7 @@ export const hrQueryDefs = {
         AND status_id != 3; 
     `,
     getEmployeeContractForPayroll: `
-      SELECT 
+      SELECT
         e.employee_id,
         e.tenant_id,
         e.branch_id,
@@ -270,6 +343,7 @@ export const hrQueryDefs = {
         c.base_salary,
         c.hours,
         c.turn_type,
+        c.journey_type,
         e.payment_schedule_id
       FROM hr_schema.employee e
       INNER JOIN hr_schema.contract c USING(contract_id)
@@ -348,39 +422,6 @@ export const hrQueryDefs = {
       FROM hr_schema.paysheet_detail
       WHERE paysheet_id = $1;
     `,
-    getHoursWorked: `
-      SELECT employee_id, clock_in::date AS work_date, SUM(turn_hours) AS total_hours
-      FROM hr_schema.clocking
-      WHERE branch_id = $1
-        AND clock_in >= $2
-        AND clock_out <= $3
-      GROUP BY employee_id, work_date;
-    `,
-    getHistorycalPayrolls: `
-      SELECT
-        pd.employee_id,
-        SUM(pd.gross_salary) AS gross
-      FROM hr_schema.paysheet_detail pd
-      INNER JOIN hr_schema.paysheet p USING(paysheet_id)
-      WHERE p.branch_id = $1
-        AND p.period_start >= (CURRENT_DATE - INTERVAL '50 weeks')
-      GROUP BY pd.employee_id;
-    `,
-    getAguinaldos: `
-      SELECT 
-        pd.employee_id,
-        SUM(pd.gross_salary) as total
-      FROM hr_schema.paysheet_detail pd
-      INNER JOIN hr_schema.paysheet p USING(paysheet_id)
-      WHERE p.branch_id = $1
-        AND p.period_start >= (date_trunc('year', CURRENT_DATE) - INTERVAL '1 month')  -- '2025-12-01' (Diciembre año anterior) Teniendo en cuenta la info compartida por el cliente
-        AND p.period_end <= (date_trunc('year', CURRENT_DATE) + INTERVAL '11 months' - INTERVAL '1 day')    -- '2026-11-30' (Noviembre año actual)
-        AND p.status_id = 2
-      GROUP BY pd.employee_id;
-    `,
-    getHolidays: `
-      SELECT date::date AS holiday_date, holiday_name, is_freeday, is_payable FROM hr_schema.holiday WHERE is_payable = true
-    `,
     getIncapacities: `
       SELECT
         employee_id,
@@ -391,8 +432,7 @@ export const hrQueryDefs = {
         percentage_to_pay
       FROM hr_schema.incapacity
       WHERE branch_id = $1
-        AND period_start >= $2
-        AND period_end <= $3
+        AND (period_start, period_end) OVERLAPS ($2, $3)
         AND is_active = true
     `,
     getSuspentionPeriod: `
@@ -682,6 +722,470 @@ export const hrQueryDefs = {
     getCountByPeriod: `
       SELECT COUNT(*) AS total FROM hr_schema.tardiness
       WHERE registered_at >= $1 AND registered_at <= $2 AND branch_id = $3
+    `,
+  },
+
+  holidayLottt: {
+    listByYear: `
+      SELECT holiday_id, date, holiday_name, is_freeday, is_payable,
+        tenant_id, holiday_year, is_recurring, source
+      FROM hr_schema.holiday
+      WHERE (holiday_year = $1 OR is_recurring = true)
+        AND (tenant_id IS NULL OR tenant_id = $2)
+      ORDER BY is_recurring DESC, date ASC
+    `,
+    checkDate: `
+      SELECT holiday_id, holiday_name, source, is_recurring
+      FROM hr_schema.holiday
+      WHERE (tenant_id IS NULL OR tenant_id = $2)
+        AND (
+          (is_recurring = true
+            AND EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM $1::date)
+            AND EXTRACT(DAY FROM date) = EXTRACT(DAY FROM $1::date))
+          OR (is_recurring = false AND date::date = $1::date)
+        )
+      LIMIT 1
+    `,
+    countDeclared: `
+      SELECT COUNT(*) AS total FROM hr_schema.holiday
+      WHERE holiday_year = $1 AND source <> 'ley'
+        AND (tenant_id = $2 OR tenant_id IS NULL)
+    `,
+    create: `
+      INSERT INTO hr_schema.holiday
+        (date, holiday_name, is_freeday, is_payable, tenant_id, holiday_year, is_recurring, source)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING holiday_id, date, holiday_name, is_freeday, is_payable, tenant_id, holiday_year, is_recurring, source
+    `,
+  },
+
+  overtimeRecord: {
+    create: `
+      INSERT INTO hr_schema.overtime_record
+        (employee_id, branch_id, tenant_id, work_date, kind, hours, rate_factor, inspectoria_authorized, authorization_ref)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING overtime_id, employee_id, branch_id, tenant_id, work_date, kind, hours, rate_factor, inspectoria_authorized, authorization_ref, created_at
+    `,
+    listByEmployeeRange: `
+      SELECT overtime_id, employee_id, branch_id, work_date, kind, hours, rate_factor, inspectoria_authorized, authorization_ref
+      FROM hr_schema.overtime_record
+      WHERE employee_id = $1 AND work_date BETWEEN $2 AND $3
+      ORDER BY work_date ASC
+    `,
+    listByEmployeeRangeKind: `
+      SELECT overtime_id, employee_id, branch_id, work_date, kind, hours, rate_factor, inspectoria_authorized, authorization_ref
+      FROM hr_schema.overtime_record
+      WHERE employee_id = $1 AND kind = $2 AND work_date BETWEEN $3 AND $4
+      ORDER BY work_date ASC
+    `,
+    sumHoursByKindRange: `
+      SELECT COALESCE(SUM(hours), 0) AS total
+      FROM hr_schema.overtime_record
+      WHERE employee_id = $1 AND kind = $2 AND work_date BETWEEN $3 AND $4
+    `,
+    listByEmployeeDateKind: `
+      SELECT overtime_id, hours, rate_factor, inspectoria_authorized
+      FROM hr_schema.overtime_record
+      WHERE employee_id = $1 AND work_date = $2 AND kind = $3
+    `,
+    sumWeightedByBranchPeriod: `
+      SELECT
+        employee_id,
+        kind,
+        SUM(hours) AS raw_hours,
+        SUM(hours * rate_factor) AS weighted_hours
+      FROM hr_schema.overtime_record
+      WHERE branch_id = $1 AND work_date BETWEEN $2 AND $3
+      GROUP BY employee_id, kind
+    `,
+  },
+
+  severanceDeposit: {
+    create: `
+      INSERT INTO hr_schema.severance_deposit
+        (employee_id, tenant_id, quarter_start, quarter_end, days, integral_daily_salary, amount, deposit_made, deposit_date, location)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (employee_id, quarter_start) DO NOTHING
+      RETURNING deposit_id, employee_id, quarter_start, quarter_end, days, integral_daily_salary, amount, deposit_made, deposit_date, location
+    `,
+    listByEmployee: `
+      SELECT deposit_id, employee_id, tenant_id, quarter_start::text AS quarter_start, quarter_end::text AS quarter_end,
+        days, integral_daily_salary, amount, deposit_made, deposit_date::text AS deposit_date, location
+      FROM hr_schema.severance_deposit
+      WHERE employee_id = $1
+      ORDER BY quarter_start ASC
+    `,
+    getById: `
+      SELECT deposit_id, employee_id, tenant_id, quarter_start::text AS quarter_start, quarter_end::text AS quarter_end,
+        days, integral_daily_salary, amount, deposit_made, deposit_date::text AS deposit_date, location
+      FROM hr_schema.severance_deposit
+      WHERE deposit_id = $1 LIMIT 1
+    `,
+    listPending: `
+      SELECT deposit_id, employee_id, quarter_start::text AS quarter_start, quarter_end::text AS quarter_end, amount
+      FROM hr_schema.severance_deposit
+      WHERE employee_id = $1 AND deposit_made = false
+      ORDER BY quarter_start ASC
+    `,
+    updateDepositMade: `
+      UPDATE hr_schema.severance_deposit
+      SET deposit_made = $1, deposit_date = $2
+      WHERE deposit_id = $3
+      RETURNING deposit_id, employee_id, quarter_start, quarter_end, amount, deposit_made, deposit_date, location
+    `,
+    sumMadeAmount: `
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM hr_schema.severance_deposit
+      WHERE employee_id = $1 AND deposit_made = true
+    `,
+  },
+
+  severanceInterest: {
+    create: `
+      INSERT INTO hr_schema.severance_interest
+        (deposit_id, employee_id, tenant_id, period_month, balance_base, applied_rate, rate_kind, amount)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (employee_id, deposit_id, period_month) DO NOTHING
+      RETURNING interest_id, deposit_id, employee_id, period_month, balance_base, applied_rate, rate_kind, amount, capitalized
+    `,
+    listByEmployeeRange: `
+      SELECT interest_id, deposit_id, employee_id, period_month, balance_base, applied_rate, rate_kind, amount, capitalized, paid_at
+      FROM hr_schema.severance_interest
+      WHERE employee_id = $1 AND period_month BETWEEN $2 AND $3
+      ORDER BY period_month ASC
+    `,
+    sumCapitalized: `
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM hr_schema.severance_interest
+      WHERE employee_id = $1 AND capitalized = true
+    `,
+    settleYear: `
+      UPDATE hr_schema.severance_interest
+      SET capitalized = $1, paid_at = CASE WHEN $1 = false THEN CURRENT_DATE ELSE paid_at END
+      WHERE employee_id = $2 AND EXTRACT(YEAR FROM period_month) = $3
+      RETURNING interest_id, period_month, amount, capitalized, paid_at
+    `,
+  },
+
+  severanceAdvance: {
+    create: `
+      INSERT INTO hr_schema.severance_advance
+        (employee_id, tenant_id, requested_amount, reason, reason_detail, guarantee_balance_at_request)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING advance_id, employee_id, requested_amount, reason, reason_detail, request_date, status, guarantee_balance_at_request
+    `,
+    listByEmployee: `
+      SELECT advance_id, employee_id, requested_amount, approved_amount, reason, reason_detail, request_date, resolution_date, status
+      FROM hr_schema.severance_advance
+      WHERE employee_id = $1
+      ORDER BY request_date DESC
+    `,
+    getById: `
+      SELECT advance_id, employee_id, tenant_id, requested_amount, approved_amount, reason, status
+      FROM hr_schema.severance_advance
+      WHERE advance_id = $1 LIMIT 1
+    `,
+    sumApproved: `
+      SELECT COALESCE(SUM(approved_amount), 0) AS total
+      FROM hr_schema.severance_advance
+      WHERE employee_id = $1 AND status = 'aprobado'
+    `,
+    approve: `
+      UPDATE hr_schema.severance_advance
+      SET status = 'aprobado', approved_amount = $1, resolution_date = $2
+      WHERE advance_id = $3
+      RETURNING advance_id, status, approved_amount, resolution_date
+    `,
+    reject: `
+      UPDATE hr_schema.severance_advance
+      SET status = 'rechazado', approved_amount = 0, resolution_date = $1
+      WHERE advance_id = $2
+      RETURNING advance_id, status, resolution_date
+    `,
+  },
+
+  vacationPeriod: {
+    create: `
+      INSERT INTO hr_schema.vacation_period
+        (employee_id, tenant_id, service_year, period_start, period_end, days_earned, bonus_days_earned)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (employee_id, service_year) DO NOTHING
+      RETURNING vacation_period_id, employee_id, service_year, period_start, period_end, days_earned, bonus_days_earned, status
+    `,
+    listByEmployee: `
+      SELECT vacation_period_id, employee_id, tenant_id, service_year,
+        period_start::text AS period_start, period_end::text AS period_end,
+        days_earned, bonus_days_earned, days_taken,
+        enjoyed_from::text AS enjoyed_from, enjoyed_to::text AS enjoyed_to,
+        normal_daily_salary, paid_amount, bonus_paid_amount, is_fractional, status
+      FROM hr_schema.vacation_period
+      WHERE employee_id = $1
+      ORDER BY service_year ASC
+    `,
+    getById: `
+      SELECT vacation_period_id, employee_id, tenant_id, service_year,
+        period_start::text AS period_start, period_end::text AS period_end,
+        days_earned, bonus_days_earned, days_taken,
+        enjoyed_from::text AS enjoyed_from, enjoyed_to::text AS enjoyed_to,
+        normal_daily_salary, paid_amount, bonus_paid_amount, status
+      FROM hr_schema.vacation_period
+      WHERE vacation_period_id = $1 LIMIT 1
+    `,
+    listPending: `
+      SELECT vacation_period_id, employee_id, service_year, days_earned, days_taken, status
+      FROM hr_schema.vacation_period
+      WHERE employee_id = $1 AND status IN ('causado', 'disfrutado')
+      ORDER BY service_year ASC
+    `,
+    enjoy: `
+      UPDATE hr_schema.vacation_period
+      SET days_taken = $1, enjoyed_from = $2, enjoyed_to = $3,
+        normal_daily_salary = $4, paid_amount = $5, status = 'disfrutando'
+      WHERE vacation_period_id = $6
+      RETURNING vacation_period_id, days_taken, days_earned, enjoyed_from, enjoyed_to, normal_daily_salary, paid_amount, status
+    `,
+    payBonus: `
+      UPDATE hr_schema.vacation_period
+      SET bonus_paid_amount = $1
+      WHERE vacation_period_id = $2
+      RETURNING vacation_period_id, bonus_paid_amount
+    `,
+  },
+
+  profitSharingPeriod: {
+    create: `
+      INSERT INTO hr_schema.profit_sharing_period
+        (tenant_id, fiscal_year, fiscal_year_start, fiscal_year_end, is_non_profit, payment_deadline)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING profit_period_id, tenant_id, fiscal_year, fiscal_year_start::text AS fiscal_year_start, fiscal_year_end::text AS fiscal_year_end,
+        liquid_benefits, distribution_percentage, distributable_amount, total_earned_salaries,
+        is_non_profit, status, closed_at, payment_deadline::text AS payment_deadline
+    `,
+    getById: `
+      SELECT profit_period_id, tenant_id, fiscal_year, fiscal_year_start::text AS fiscal_year_start, fiscal_year_end::text AS fiscal_year_end,
+        liquid_benefits, distribution_percentage, distributable_amount, total_earned_salaries,
+        is_non_profit, status, closed_at, payment_deadline::text AS payment_deadline
+      FROM hr_schema.profit_sharing_period
+      WHERE profit_period_id = $1 LIMIT 1
+    `,
+    getByYear: `
+      SELECT profit_period_id, tenant_id, fiscal_year, fiscal_year_start::text AS fiscal_year_start, fiscal_year_end::text AS fiscal_year_end,
+        liquid_benefits, distribution_percentage, distributable_amount, total_earned_salaries,
+        is_non_profit, status, closed_at, payment_deadline::text AS payment_deadline
+      FROM hr_schema.profit_sharing_period
+      WHERE tenant_id = $1 AND fiscal_year = $2 LIMIT 1
+    `,
+    setLiquidBenefits: `
+      UPDATE hr_schema.profit_sharing_period
+      SET liquid_benefits = $1,
+        distributable_amount = $1 * distribution_percentage
+      WHERE profit_period_id = $2
+      RETURNING profit_period_id, liquid_benefits, distribution_percentage, distributable_amount
+    `,
+    updatePercentage: `
+      UPDATE hr_schema.profit_sharing_period
+      SET distribution_percentage = $1,
+        distributable_amount = COALESCE(liquid_benefits, 0) * $1
+      WHERE profit_period_id = $2
+      RETURNING profit_period_id, distribution_percentage, distributable_amount
+    `,
+    setTotals: `
+      UPDATE hr_schema.profit_sharing_period
+      SET total_earned_salaries = $1, status = 'calculado'
+      WHERE profit_period_id = $2
+      RETURNING profit_period_id, total_earned_salaries, status
+    `,
+    close: `
+      UPDATE hr_schema.profit_sharing_period
+      SET status = 'cerrado', closed_at = NOW()
+      WHERE profit_period_id = $1
+      RETURNING profit_period_id, status, closed_at
+    `,
+  },
+
+  profitSharingDetail: {
+    upsert: `
+      INSERT INTO hr_schema.profit_sharing_detail
+        (profit_period_id, employee_id, earned_salary, complete_months, daily_salary, raw_quota, min_cap, max_cap, final_amount)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (profit_period_id, employee_id) DO UPDATE SET
+        earned_salary = EXCLUDED.earned_salary,
+        complete_months = EXCLUDED.complete_months,
+        daily_salary = EXCLUDED.daily_salary,
+        raw_quota = EXCLUDED.raw_quota,
+        min_cap = EXCLUDED.min_cap,
+        max_cap = EXCLUDED.max_cap,
+        final_amount = EXCLUDED.final_amount
+      RETURNING profit_detail_id, profit_period_id, employee_id, earned_salary, complete_months,
+        daily_salary, raw_quota, min_cap, max_cap, final_amount, advance_paid
+    `,
+    listByPeriod: `
+      SELECT profit_detail_id, profit_period_id, employee_id, earned_salary, complete_months,
+        daily_salary, raw_quota, min_cap, max_cap, final_amount, advance_paid, advance_paid_at
+      FROM hr_schema.profit_sharing_detail
+      WHERE profit_period_id = $1
+    `,
+    getByEmployee: `
+      SELECT profit_detail_id, profit_period_id, employee_id, earned_salary, complete_months,
+        daily_salary, raw_quota, min_cap, max_cap, final_amount, advance_paid, advance_paid_at
+      FROM hr_schema.profit_sharing_detail
+      WHERE profit_period_id = $1 AND employee_id = $2 LIMIT 1
+    `,
+    upsertAdvance: `
+      INSERT INTO hr_schema.profit_sharing_detail
+        (profit_period_id, employee_id, earned_salary, complete_months, daily_salary, min_cap, max_cap, advance_paid, advance_paid_at)
+      VALUES ($1, $2, 0, 0, 0, 0, 0, $3, $4)
+      ON CONFLICT (profit_period_id, employee_id) DO UPDATE SET
+        advance_paid = hr_schema.profit_sharing_detail.advance_paid + EXCLUDED.advance_paid,
+        advance_paid_at = EXCLUDED.advance_paid_at
+      RETURNING profit_detail_id, profit_period_id, employee_id, advance_paid, advance_paid_at
+    `,
+  },
+
+  settlement: {
+    create: `
+      INSERT INTO hr_schema.settlement
+        (employee_id, tenant_id, branch_id, termination_date, payment_due_date, hire_date,
+         complete_years, remainder_months, last_integral_daily_salary, last_normal_daily_salary,
+         via1_amount, via2_amount, selected_via, severance_amount, advances_deducted,
+         deductions_amount, subtotal, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'calculada')
+      RETURNING settlement_id, employee_id, termination_date, payment_due_date, subtotal, status
+    `,
+    getById: `
+      SELECT settlement_id, employee_id, tenant_id, branch_id,
+        termination_date::text AS termination_date, payment_due_date::text AS payment_due_date,
+        payment_date::text AS payment_date, hire_date::text AS hire_date, complete_years, remainder_months,
+        last_integral_daily_salary, last_normal_daily_salary, via1_amount, via2_amount, selected_via, severance_amount,
+        advances_deducted, deductions_amount, subtotal, mora_days, mora_rate, mora_amount, total, status
+      FROM hr_schema.settlement
+      WHERE settlement_id = $1 LIMIT 1
+    `,
+    getByEmployeeAndDate: `
+      SELECT settlement_id FROM hr_schema.settlement
+      WHERE employee_id = $1 AND termination_date = $2 LIMIT 1
+    `,
+    pay: `
+      UPDATE hr_schema.settlement
+      SET payment_date = $1, mora_days = $2, mora_rate = $3, mora_amount = $4,
+        total = subtotal + $4, status = 'pagada'
+      WHERE settlement_id = $5
+      RETURNING settlement_id, payment_date, mora_days, mora_amount, total, status
+    `,
+    void: `
+      UPDATE hr_schema.settlement
+      SET status = 'anulada'
+      WHERE settlement_id = $1
+      RETURNING settlement_id, status
+    `,
+    listOverdue: `
+      SELECT settlement_id, employee_id, tenant_id, termination_date, payment_due_date, subtotal
+      FROM hr_schema.settlement
+      WHERE tenant_id = $1 AND payment_date IS NULL AND status <> 'anulada'
+        AND payment_due_date < CURRENT_DATE
+      ORDER BY payment_due_date ASC
+    `,
+  },
+
+  settlementItem: {
+    create: `
+      INSERT INTO hr_schema.settlement_item
+        (settlement_id, code, concept_name, article, salary_basis, base_amount, days, amount, formula_text, sort_order)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING settlement_item_id, code, concept_name, article, salary_basis, base_amount, days, amount, formula_text
+    `,
+    listBySettlement: `
+      SELECT settlement_item_id, code, concept_name, article, salary_basis, base_amount, days, amount, formula_text, sort_order
+      FROM hr_schema.settlement_item
+      WHERE settlement_id = $1
+      ORDER BY sort_order ASC
+    `,
+  },
+
+  employeeBeneficiary: {
+    create: `
+      INSERT INTO hr_schema.employee_beneficiary
+        (employee_id, tenant_id, full_name, doc_number, relationship, claim_date)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING beneficiary_id, employee_id, full_name, doc_number, relationship, claim_date, validated
+    `,
+    listByEmployee: `
+      SELECT beneficiary_id, employee_id, full_name, doc_number, relationship, claim_date,
+        validated, validated_at, share_percentage, share_amount
+      FROM hr_schema.employee_beneficiary
+      WHERE employee_id = $1
+      ORDER BY claim_date ASC
+    `,
+    listValidatedByEmployee: `
+      SELECT beneficiary_id FROM hr_schema.employee_beneficiary
+      WHERE employee_id = $1 AND validated = true
+    `,
+    getById: `
+      SELECT beneficiary_id, employee_id, tenant_id, full_name, doc_number, relationship, claim_date, validated
+      FROM hr_schema.employee_beneficiary
+      WHERE beneficiary_id = $1 LIMIT 1
+    `,
+    validate: `
+      UPDATE hr_schema.employee_beneficiary
+      SET validated = true, validated_at = $1
+      WHERE beneficiary_id = $2
+      RETURNING beneficiary_id, validated, validated_at
+    `,
+    updateShare: `
+      UPDATE hr_schema.employee_beneficiary
+      SET share_percentage = $1, share_amount = $2, settlement_id = $3
+      WHERE beneficiary_id = $4
+    `,
+  },
+
+  employeeDeduction: {
+    create: `
+      INSERT INTO hr_schema.employee_deduction
+        (employee_id, tenant_id, kind, description, total_amount, installment_amount, outstanding_balance,
+         authorized, authorization_date, authorization_ref, union_organization, start_date)
+      VALUES ($1, $2, $3, $4, $5, $6, $5, $7, $8, $9, $10, $11)
+      RETURNING deduction_id, employee_id, kind, description, total_amount, installment_amount,
+        outstanding_balance, authorized, authorization_date, union_organization, start_date, is_active
+    `,
+    listByEmployee: `
+      SELECT deduction_id, employee_id, kind, description, total_amount, installment_amount,
+        outstanding_balance, authorized, authorization_date, union_organization, start_date, end_date, is_active
+      FROM hr_schema.employee_deduction
+      WHERE employee_id = $1
+      ORDER BY start_date DESC
+    `,
+    listActiveByEmployee: `
+      SELECT deduction_id, kind, installment_amount, outstanding_balance
+      FROM hr_schema.employee_deduction
+      WHERE employee_id = $1 AND is_active = true AND outstanding_balance > 0
+        AND kind <> 'alimentaria'
+    `,
+    getById: `
+      SELECT deduction_id, employee_id, tenant_id, kind, total_amount, installment_amount,
+        outstanding_balance, authorized, is_active
+      FROM hr_schema.employee_deduction
+      WHERE deduction_id = $1 LIMIT 1
+    `,
+    update: `
+      UPDATE hr_schema.employee_deduction
+      SET
+        authorized = COALESCE($1, authorized),
+        is_active = COALESCE($2, is_active),
+        end_date = COALESCE($3, end_date),
+        outstanding_balance = COALESCE($4, outstanding_balance)
+      WHERE deduction_id = $5
+      RETURNING deduction_id, authorized, is_active, end_date, outstanding_balance
+    `,
+    applyPayment: `
+      UPDATE hr_schema.employee_deduction
+      SET outstanding_balance = outstanding_balance - $1
+      WHERE deduction_id = $2
+      RETURNING deduction_id, outstanding_balance
+    `,
+    listOutstandingByEmployee: `
+      SELECT deduction_id, kind, outstanding_balance
+      FROM hr_schema.employee_deduction
+      WHERE employee_id = $1 AND is_active = true AND outstanding_balance > 0
     `,
   },
 };

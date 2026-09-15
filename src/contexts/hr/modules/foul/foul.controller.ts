@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FoulService } from './foul.service';
 import { RegisterFoulDto } from './dto/create_foul.dto';
@@ -8,7 +16,9 @@ import {
   getFoulsByBranchDoc,
   getFoulsByPeriodDoc,
 } from '@/docs/contexts/hr/foul';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
+@UseGuards(AuthenticationGuard)
 @ApiTags('Foul')
 @Controller('foul')
 export class FoulController {

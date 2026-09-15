@@ -1,0 +1,198 @@
+### ============================================================
+### HR-VE-05 · Prestaciones sociales (Art. 142 LOTTT)
+### ============================================================
+### EL CALCULO MAS IMPORTANTE DEL MODULO.
+###
+### El Art. 142 obliga a calcular la prestacion por DOS caminos
+### independientes y pagar EL QUE RESULTE MAYOR (literal d).
+###
+###   VIA 1 — garantia acumulada
+###     142.a  15 dias por trimestre, al salario integral DEL
+###            TRIMESTRE (cada trimestre congela su base).
+###     142.b  dias adicionales por antiguedad, al ULTIMO salario
+###            integral: 2 dias por anio, SOLO DESPUES del primer
+###            anio, tope 30 dias.
+###
+###   VIA 2 — retroactivo (142.c)
+###     30 dias por anio de servicio o fraccion SUPERIOR a 6 meses,
+###     al ULTIMO salario integral.
+###
+###   SELECCION (142.d)
+###     prestacion = MAX(via1, via2)
+###
+### TRES EXCEPCIONES POR ANTIGUEDAD que este archivo verifica:
+###   #1 (142.b) los 2 dias/anio NO corren durante el primer anio.
+###   #2 (142.c) la fraccion redondea a anio solo si supera 6 meses.
+###   #3 (142.e) menos de 3 meses -> 5 dias por mes o fraccion,
+###              sustituyendo por completo ambos esquemas.
+###
+### Base salarial: SIEMPRE salario integral (Art. 122). Usar el
+### salario normal aqui es el error de calculo mas costoso.
+###
+### Ejecutar 00-setup.test.http primero.
+### ESTADO: Fase 2 del roadmap (submodulo severance).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@tenantId   = a57174b6-c757-4bb9-bae2-ea4e7ffa6088
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+# Empleado con antiguedad (ingreso 2019-03-15). Se crea en la FASE 0
+# de 00-setup.test.http; copiar aqui el UUID devuelto.
+@employeeAntiguoId = 00000000-0000-0000-0000-000000000000
+
+
+### 1. Generar los depositos trimestrales del empleado
+# Ingreso 2019-03-15. Genera un registro por trimestre con el
+# salario integral vigente en cada uno.
+# Espera: 201 y una fila por trimestre desde el ingreso.
+POST {{baseUrl}}/severance/deposits/generate
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeAntiguoId}}",
+  "until": "2026-08-27",
+  "location": "fideicomiso"
+}
+
+
+### 2. Consultar los depositos generados
+# Cada trimestre debe conservar SU salario integral, no el actual.
+# Espera: los trimestres previos al aumento de 2026-01-01 usan la
+# base anterior; los posteriores la nueva. Si todos muestran el
+# mismo integral_daily_salary, el congelado esta roto.
+GET {{baseUrl}}/severance/deposits/{{employeeAntiguoId}}
+Accept: application/json
+
+
+### ============================================================
+### EXCEPCION #1 — dias adicionales (Art. 142.b)
+### ============================================================
+### Error tipico: acumular 2 dias desde el primer anio. La ley dice
+### "despues del primer anio de servicio".
+###   anio 1  -> 0 dias
+###   anio 2  -> 2 dias
+###   anio 3  -> 4 dias
+###   anio 16 -> 30 dias (tope, no crece mas)
+
+### 3. Antiguedad exacta de 1 anio -> 0 dias adicionales
+# Espera: { completeYears: 1, additionalDays: 0 }
+GET {{baseUrl}}/severance/additional-days?years=1
+Accept: application/json
+
+
+### 4. Anio 2 -> 2 dias
+# Espera: { additionalDays: 2 }
+GET {{baseUrl}}/severance/additional-days?years=2
+Accept: application/json
+
+
+### 5. Anio 3 -> 4 dias
+# Espera: { additionalDays: 4 }
+GET {{baseUrl}}/severance/additional-days?years=3
+Accept: application/json
+
+
+### 6. Anio 16 -> 30 dias (tope alcanzado)
+# Espera: { additionalDays: 30, capped: true }
+GET {{baseUrl}}/severance/additional-days?years=16
+Accept: application/json
+
+
+### 7. Anio 25 -> sigue en 30 dias
+# Espera: { additionalDays: 30, capped: true }
+GET {{baseUrl}}/severance/additional-days?years=25
+Accept: application/json
+
+
+### ============================================================
+### EXCEPCION #2 — fraccion mayor a 6 meses (Art. 142.c)
+### ============================================================
+###   3 anios 5 meses -> 3 anios -> 90 dias
+###   3 anios 7 meses -> 4 anios -> 120 dias
+
+### 8. Fraccion de 5 meses NO redondea
+# Espera: { completeYears: 3, remainderMonths: 5,
+#           computableYears: 3, days: 90 }
+GET {{baseUrl}}/severance/retroactive-preview?hireDate=2023-01-15&endDate=2026-06-15
+Accept: application/json
+
+
+### 9. Fraccion de 7 meses SI redondea
+# Espera: { completeYears: 3, remainderMonths: 7,
+#           computableYears: 4, days: 120 }
+GET {{baseUrl}}/severance/retroactive-preview?hireDate=2023-01-15&endDate=2026-08-15
+Accept: application/json
+
+
+### 10. Fraccion de exactamente 6 meses NO redondea
+# La ley exige fraccion SUPERIOR a 6 meses. El limite es estricto.
+# Espera: { remainderMonths: 6, computableYears: 3, days: 90 }
+GET {{baseUrl}}/severance/retroactive-preview?hireDate=2023-01-15&endDate=2026-07-15
+Accept: application/json
+
+
+### ============================================================
+### EXCEPCION #3 — antiguedad menor a 3 meses (Art. 142.e)
+### ============================================================
+### 5 dias de salario por mes trabajado o fraccion. Sustituye por
+### completo el esquema trimestral y el retroactivo.
+
+### 11. Relacion de 2 meses
+# 2 meses -> 5 * 2 = 10 dias de salario.
+# Espera: { selectedVia: "antiguedad_corta", days: 10 }
+GET {{baseUrl}}/severance/calculate?hireDate=2026-06-01&endDate=2026-08-01&preview=true
+Accept: application/json
+
+
+### 12. Relacion de 40 dias -> fraccion cuenta como mes completo
+# ceil(40 / 30) = 2 meses -> 10 dias.
+# Espera: { monthsOrFraction: 2, days: 10 }
+GET {{baseUrl}}/severance/calculate?hireDate=2026-06-01&endDate=2026-07-11&preview=true
+Accept: application/json
+
+
+### 13. Relacion de 3 meses exactos -> ya NO aplica la excepcion
+# Espera: selectedVia distinto de "antiguedad_corta".
+GET {{baseUrl}}/severance/calculate?hireDate=2026-05-01&endDate=2026-08-01&preview=true
+Accept: application/json
+
+
+### ============================================================
+### SELECCION DEL MONTO MAYOR (Art. 142.d)
+### ============================================================
+
+### 14. Calculo completo del empleado de setup
+# Espera un cuerpo con AMBAS vias visibles:
+#   { via1Amount, via2Amount, selectedVia, severanceAmount }
+# selectedVia debe corresponder al mayor de los dos montos.
+GET {{baseUrl}}/severance/calculate/{{employeeAntiguoId}}?endDate=2026-08-27
+Accept: application/json
+
+
+### 15. Caso donde gana la GARANTIA (via1 > via2)
+# Ocurre con antiguedad larga y salario estable: la suma de
+# trimestres supera los 30 dias/anio del retroactivo.
+# Espera: selectedVia = "garantia", severanceAmount = via1Amount
+GET {{baseUrl}}/severance/calculate/{{employeeAntiguoId}}?endDate=2026-08-27&scenario=stable-salary
+Accept: application/json
+
+
+### 16. Caso donde gana el RETROACTIVO (via2 > via1)
+# Ocurre tras un aumento fuerte: el retroactivo recalcula TODA la
+# antiguedad al ultimo salario integral, que ahora es mucho mayor.
+# Espera: selectedVia = "retroactivo", severanceAmount = via2Amount
+GET {{baseUrl}}/severance/calculate/{{employeeAntiguoId}}?endDate=2026-08-27&scenario=recent-raise
+Accept: application/json
+
+
+### 17. El resultado debe persistir ambas vias
+# Ante un reclamo hay que poder demostrar por que se pago ese monto.
+# Prescripcion de prestaciones: 10 anios (Art. 51).
+# Espera: via1_amount y via2_amount NO nulos en el registro guardado.
+POST {{baseUrl}}/severance/calculate/{{employeeAntiguoId}}/persist
+Content-Type: application/json
+
+{
+  "end_date": "2026-08-27"
+}

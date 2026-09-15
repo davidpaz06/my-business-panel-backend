@@ -27,8 +27,8 @@ export class ReturnProductDto {
 
 export class ReturnTransactionDto {
   /**
-   * Sale ID. The server resolves the corresponding digital + electronic
-   * invoices from this and stores both invoice references in return_transaction.
+   * Sale ID. The server resolves the corresponding invoice from this and
+   * stores the invoice reference in return_transaction.
    */
   @IsUUID()
   sale_id!: string;

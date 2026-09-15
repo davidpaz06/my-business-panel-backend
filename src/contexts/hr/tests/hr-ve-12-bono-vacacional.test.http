@@ -1,0 +1,155 @@
+### ============================================================
+### HR-VE-12 · Bono vacacional (Art. 192 LOTTT)
+### ============================================================
+### Que mide: la bonificacion especial que se paga EN LA
+### OPORTUNIDAD de las vacaciones. Es un concepto DISTINTO de las
+### vacaciones mismas (HR-VE-11): se pagan los dos.
+###
+### Formula (Art. 192):
+###   dias = min(15 + max(anios_completos - 1, 0), 30)
+###
+###   Anio 1  -> 15 dias
+###   Anio 2  -> 16 dias
+###   Anio 16 -> 30 dias (tope)
+###
+### Base salarial: salario NORMAL.
+###
+### IMPORTANTE — tiene CARACTER SALARIAL. Por eso alimenta la
+### alicuota del salario integral (Art. 122):
+###   alicuota_bono_vacacional = (salario_diario * dias_bono) / 360
+### Un error en estos dias se propaga al salario integral y de ahi
+### a TODAS las prestaciones (Art. 142). Es un calculo con efecto
+### en cascada.
+###
+### ESTADO: Fase 3 del roadmap (submodulo vacations).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+# Empleado con antiguedad (ingreso 2019-03-15). Se crea en la FASE 0
+# de 00-setup.test.http; copiar aqui el UUID devuelto.
+@employeeAntiguoId = 00000000-0000-0000-0000-000000000000
+@periodId   = 00000000-0000-0000-0000-000000000000
+
+
+### ============================================================
+### ESCALONAMIENTO (Art. 192)
+### ============================================================
+
+### 1. Anio 1 -> 15 dias
+# Espera: { bonusDays: 15 }
+GET {{baseUrl}}/vacations/bonus-entitlement?years=1
+Accept: application/json
+
+
+### 2. Anio 2 -> 16 dias
+# Espera: { bonusDays: 16 }
+GET {{baseUrl}}/vacations/bonus-entitlement?years=2
+Accept: application/json
+
+
+### 3. Anio 10 -> 24 dias
+# 15 + (10-1) = 24
+# Espera: { bonusDays: 24 }
+GET {{baseUrl}}/vacations/bonus-entitlement?years=10
+Accept: application/json
+
+
+### 4. Anio 16 -> 30 dias (tope)
+# 15 + 15 = 30
+# Espera: { bonusDays: 30, capped: true }
+GET {{baseUrl}}/vacations/bonus-entitlement?years=16
+Accept: application/json
+
+
+### 5. Anio 30 -> sigue en 30 dias
+# Espera: { bonusDays: 30, capped: true }
+GET {{baseUrl}}/vacations/bonus-entitlement?years=30
+Accept: application/json
+
+
+### ============================================================
+### DIFERENCIA CON LAS VACACIONES (HR-VE-11)
+### ============================================================
+
+### 6. CLAVE — ambos conceptos se pagan, no se sustituyen
+# Empleado con 7 anios:
+#   vacaciones   (Art. 190) = 15 + min(6,15) = 21 dias
+#   bono vacac.  (Art. 192) = 15 + 6         = 21 dias
+#   total a pagar            = 42 dias de salario normal
+#
+# Espera un cuerpo con los dos conceptos SEPARADOS:
+#   { vacationDays: 21, bonusDays: 21, totalDays: 42 }
+# Si devuelve solo 21, se esta omitiendo uno de los dos.
+GET {{baseUrl}}/vacations/entitlement/{{employeeAntiguoId}}?years=7&includeBonus=true
+Accept: application/json
+
+
+### 7. Los escalones NO son identicos en todos los tramos
+# Vacaciones topan en +15 adicionales; el bono topa en 30 totales.
+# Anio 20:  vacaciones = 30 (tope), bono = 30 (tope)
+# Anio 16:  ambos llegan a 30 por caminos distintos.
+# Espera: coherencia en los dos calculos.
+GET {{baseUrl}}/vacations/entitlement/{{employeeAntiguoId}}?years=20&includeBonus=true
+Accept: application/json
+
+
+### ============================================================
+### MONTO DEL BONO
+### ============================================================
+
+### 8. Calcular el bono del periodo
+# salario_normal_diario 66.6667, 21 dias
+#   bono = 66.6667 * 21 = 1400.00
+# Espera: { days: 21, amount: 1400.0000, salaryBasis: "normal",
+#           article: "192" }
+GET {{baseUrl}}/vacations/periods/{{periodId}}/bonus-amount
+Accept: application/json
+
+
+### 9. Registrar el pago del bono
+# Se paga en la oportunidad de las vacaciones.
+POST {{baseUrl}}/vacations/periods/{{periodId}}/pay-bonus
+Content-Type: application/json
+
+{
+  "paid_at": "2026-09-01"
+}
+
+
+### ============================================================
+### EFECTO EN EL SALARIO INTEGRAL (Art. 122)
+### ============================================================
+
+### 10. CLAVE — el bono alimenta la alicuota del salario integral
+# salario_diario 66.6667, bono 21 dias
+#   alicuota_bono = (66.6667 * 21) / 360 = 3.8889
+#
+# Espera: bonoVacacionalDays = 21 y alicuotaBonoVacacional = 3.8889
+# Si la alicuota usa 15 dias fijos en vez de los 21 que le
+# corresponden por antiguedad, el salario integral queda
+# subestimado y con el TODAS las prestaciones del Art. 142.
+GET {{baseUrl}}/salary/{{employeeAntiguoId}}/integral?date=2026-09-01&explain=true
+Accept: application/json
+
+
+### 11. Verificar la propagacion a prestaciones
+# Un cambio en los dias de bono debe mover el salario integral y,
+# por tanto, el monto de las prestaciones.
+# Espera: last_integral_daily_salary refleja la alicuota correcta.
+GET {{baseUrl}}/severance/calculate/{{employeeAntiguoId}}?endDate=2026-09-01&explain=true
+Accept: application/json
+
+
+### 12. RECHAZO — bono por debajo del minimo legal
+# Espera: 400. El piso son 15 dias (Art. 192).
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "dias_bono_vacacional_base",
+  "param_value": 10,
+  "valid_from": "2026-10-01",
+  "source": "CCT invalida"
+}

@@ -28,7 +28,7 @@ export const reportingQueries = {
     INNER JOIN pos_schema.sale s ON s.sale_id = si.sale_id
     INNER JOIN general_schema.product_variant pv
       ON pv.tenant_id = si.tenant_id AND pv.product_variant_id = si.product_variant_id
-    LEFT JOIN general_schema.product p ON p.cabys_code = pv.cabys_code
+    LEFT JOIN general_schema.product p ON p.product_id = pv.product_id
     WHERE si.tenant_id = $1
       AND s.is_completed = TRUE
       AND s.sale_date >= $2

@@ -24,7 +24,6 @@ interface SaleContextRow {
   subtotal_amount: string;
   tax_amount: string;
   total_amount: string;
-  has_electronic_invoice: boolean;
   is_completed: boolean;
   branch_id: string;
   branch_name: string | null;
@@ -35,16 +34,11 @@ interface SaleContextRow {
   last_name: string | null;
   document_number: string | null;
   customer_email: string | null;
-  digital_sale_invoice_id: string | null;
+  invoice_id: string | null;
   digital_invoiced_at: Date | null;
   digital_subtotal: string | null;
   digital_tax: string | null;
   digital_total: string | null;
-  electronic_sale_invoice_id: string | null;
-  electronic_key_number: string | null;
-  electronic_consecutive: string | null;
-  electronic_status_id: number | null;
-  electronic_created_at: Date | null;
 }
 
 @Injectable()
@@ -53,8 +47,7 @@ export class ReturnsService {
 
   /**
    * Returns the full refund context for a given sale: sale info, customer,
-   * digital invoice (always exists for completed sales), electronic invoice
-   * (when has_electronic_invoice = true), and the line items.
+   * invoice (always exists for completed sales), and the line items.
    */
   async getSaleRefundContext(saleId: string) {
     const ctxResult = await this.db.query(returns.getSaleContext, [saleId]);
@@ -75,7 +68,6 @@ export class ReturnsService {
         subtotal_amount: Number(row.subtotal_amount),
         tax_amount: Number(row.tax_amount),
         total_amount: Number(row.total_amount),
-        has_electronic_invoice: row.has_electronic_invoice,
         is_completed: row.is_completed,
         branch_id: row.branch_id,
         branch_name: row.branch_name,
@@ -92,25 +84,15 @@ export class ReturnsService {
             email: row.customer_email,
           }
         : null,
-      digital_invoice: row.digital_sale_invoice_id
+      invoice: row.invoice_id
         ? {
-            digital_sale_invoice_id: row.digital_sale_invoice_id,
+            invoice_id: row.invoice_id,
             invoiced_at: row.digital_invoiced_at,
             subtotal_amount: Number(row.digital_subtotal ?? 0),
             tax_amount: Number(row.digital_tax ?? 0),
             total_amount: Number(row.digital_total ?? 0),
           }
         : null,
-      electronic_invoice:
-        row.has_electronic_invoice && row.electronic_sale_invoice_id
-          ? {
-              electronic_sale_invoice_id: row.electronic_sale_invoice_id,
-              key_number: row.electronic_key_number,
-              consecutive_number: row.electronic_consecutive,
-              status_id: row.electronic_status_id,
-              created_at: row.electronic_created_at,
-            }
-          : null,
       items: itemsResult.rows.map((it: any) => ({
         sale_item_id: it.sale_item_id,
         product_variant_id: it.product_variant_id,
@@ -119,15 +101,14 @@ export class ReturnsService {
         available_quantity: Number(it.available_quantity),
         unit_price: Number(it.unit_price),
         total_price: Number(it.total_price),
-        digital_sale_invoice_item_id: it.digital_sale_invoice_item_id,
-        electronic_sale_invoice_item_id: it.electronic_sale_invoice_item_id,
+        invoice_item_id: it.invoice_item_id,
       })),
     };
   }
 
   /**
    * Creates a partial return for a sale. Auto-sets return_date server-side.
-   * Resolves both digital and electronic invoice IDs from the sale.
+   * Resolves the invoice ID from the sale.
    */
   async createPartialRefund(data: ReturnTransactionDto) {
     const {
@@ -151,17 +132,13 @@ export class ReturnsService {
     }
     const ctx: SaleContextRow = ctxResult.rows[0];
 
-    if (!ctx.digital_sale_invoice_id) {
+    if (!ctx.invoice_id) {
       throw new BadRequestException(
-        'La venta no tiene factura digital asociada — no se puede reembolsar',
+        'La venta no tiene factura asociada — no se puede reembolsar',
       );
     }
 
     const tenantCustomerId = data.tenant_customer_id ?? ctx.tenant_customer_id;
-    const electronicId =
-      ctx.has_electronic_invoice && ctx.electronic_sale_invoice_id
-        ? ctx.electronic_sale_invoice_id
-        : null;
 
     // Compute total refund amount from line items
     const totalRefund = return_products.reduce((acc, p) => {
@@ -175,8 +152,7 @@ export class ReturnsService {
     try {
       // 1. Create return_transaction header (server sets return_date)
       const headerRes = await this.db.query(returns.newTransaction, [
-        ctx.digital_sale_invoice_id,
-        electronicId,
+        ctx.invoice_id,
         tenantCustomerId ?? null,
         Number(totalRefund.toFixed(2)),
         refund_method ?? null,
@@ -189,7 +165,7 @@ export class ReturnsService {
         headerRes.rows[0].return_transaction_id;
 
       // 2. Bulk insert return_product rows. The update_on_return trigger
-      //    handles all reconciliation (sale_item, digital_sale_invoice_item,
+      //    handles all reconciliation (sale_item, invoice_item,
       //    invoice totals, sale totals).
       const productRows: ReturnProduct[] = return_products.map((p) => ({
         quantity: p.quantity,
@@ -229,22 +205,16 @@ export class ReturnsService {
     }
     const ctx: SaleContextRow = ctxResult.rows[0];
 
-    if (!ctx.digital_sale_invoice_id) {
+    if (!ctx.invoice_id) {
       throw new BadRequestException(
-        'La venta no tiene factura digital asociada — no se puede reembolsar',
+        'La venta no tiene factura asociada — no se puede reembolsar',
       );
     }
-
-    const electronicId =
-      ctx.has_electronic_invoice && ctx.electronic_sale_invoice_id
-        ? ctx.electronic_sale_invoice_id
-        : null;
 
     await this.db.query('BEGIN');
     try {
       const headerRes = await this.db.query(returns.newTransaction, [
-        ctx.digital_sale_invoice_id,
-        electronicId,
+        ctx.invoice_id,
         ctx.tenant_customer_id ?? null,
         Number(ctx.total_amount),
         null,

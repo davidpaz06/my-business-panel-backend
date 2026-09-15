@@ -2,22 +2,17 @@ export const ivaQueries = {
   getSummary: `
     WITH
 
-    -- R2.1: IVA Débito — cobrado en ventas con factura electrónica aceptada (status_id = 2).
-    -- El IVA se lee del encabezado de la factura digital (digital_sale_invoice.tax_amount),
-    -- que se puebla en toda venta. EXISTS evita fan-out por multiples items/facturas.
+    -- R2.1: IVA Débito — cobrado en ventas facturadas en el periodo.
+    -- El IVA se lee del encabezado de la factura (invoice.tax_amount), que se
+    -- puebla en toda venta.
     debito AS (
-      SELECT COALESCE(SUM(di.tax_amount), 0) AS total
-      FROM pos_schema.digital_sale_invoice di
+      SELECT COALESCE(SUM(inv.tax_amount), 0) AS total
+      FROM pos_schema.invoice inv
       JOIN pos_schema.sale s
-        ON s.sale_id = di.sale_id
+        ON s.sale_id = inv.sale_id
       JOIN general_schema.branch b
         ON b.branch_id = s.branch_id AND b.tenant_id = $1
-      WHERE di.invoiced_at BETWEEN $2::timestamptz AND $3::timestamptz
-        AND EXISTS (
-          SELECT 1
-          FROM pos_schema.electronic_sale_invoice esi
-          WHERE esi.sale_id = s.sale_id AND esi.status_id = 2
-        )
+      WHERE inv.invoiced_at BETWEEN $2::timestamptz AND $3::timestamptz
     ),
 
     -- R2.2: IVA Crédito — compras con factura ya pagada
@@ -46,20 +41,18 @@ export const ivaQueries = {
 
     -- R2.5: IVA Notas de Crédito — IVA revertido por devoluciones
     notas_credito AS (
-      SELECT COALESCE(SUM(rp.total_price * COALESCE(dii.tax_rate_percentage, 0) / 100.0), 0) AS total
+      SELECT COALESCE(SUM(rp.total_price * COALESCE(ii.tax_rate_percentage, 0) / 100.0), 0) AS total
       FROM pos_schema.return_product rp
       JOIN pos_schema.return_transaction rt
         ON rt.return_transaction_id = rp.return_transaction_id
-      LEFT JOIN pos_schema.digital_sale_invoice di
-        ON di.digital_sale_invoice_id = rt.digital_sale_invoice_id
-      LEFT JOIN pos_schema.electronic_sale_invoice esi
-        ON esi.electronic_sale_invoice_id = rt.electronic_sale_invoice_id
+      JOIN pos_schema.invoice inv
+        ON inv.invoice_id = rt.invoice_id
       JOIN pos_schema.sale s
-        ON s.sale_id = COALESCE(di.sale_id, esi.sale_id)
+        ON s.sale_id = inv.sale_id
       JOIN general_schema.branch b
         ON b.branch_id = s.branch_id AND b.tenant_id = $1
-      LEFT JOIN pos_schema.digital_sale_invoice_item dii
-        ON dii.sale_item_id = rp.sale_item_id
+      LEFT JOIN pos_schema.invoice_item ii
+        ON ii.sale_item_id = rp.sale_item_id
       WHERE rt.return_date BETWEEN $2::timestamptz AND $3::timestamptz
     )
 

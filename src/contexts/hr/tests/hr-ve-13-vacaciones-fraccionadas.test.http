@@ -1,0 +1,132 @@
+### ============================================================
+### HR-VE-13 · Vacaciones fraccionadas (Arts. 195, 196 LOTTT)
+### ============================================================
+### Que mide: que se paga cuando la relacion termina sin haber
+### disfrutado las vacaciones, o antes de cumplir el anio.
+###
+### Dos supuestos distintos:
+###
+###   Art. 195 — vacaciones CAUSADAS no disfrutadas
+###     Se pagan al SALARIO NORMAL DE LA TERMINACION, no al salario
+###     que estaba vigente cuando se causaron. Si hubo aumentos, el
+###     trabajador cobra al salario nuevo.
+###
+###   Art. 196 — terminacion ANTES de cumplir el anio
+###     Se pagan vacaciones y bono vacacional en PROPORCION a los
+###     meses completos de servicio:
+###       fraccion_vac  = dias_vacaciones(anio_siguiente) * meses/12
+###       fraccion_bono = dias_bono(anio_siguiente)       * meses/12
+###
+### Solo cuentan los MESES COMPLETOS. Una fraccion de mes no suma.
+###
+### ESTADO: Fase 3 del roadmap (submodulo vacations).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+# Empleado con antiguedad (ingreso 2019-03-15). Se crea en la FASE 0
+# de 00-setup.test.http; copiar aqui el UUID devuelto.
+@employeeAntiguoId = 00000000-0000-0000-0000-000000000000
+
+
+### ============================================================
+### ART. 196 — TERMINACION ANTES DEL PRIMER ANIO
+### ============================================================
+
+### 1. 6 meses completos de servicio
+# Ingreso 2026-01-15, egreso 2026-07-15 -> 6 meses.
+#   fraccion_vac  = 15 * (6/12) = 7.5 dias
+#   fraccion_bono = 15 * (6/12) = 7.5 dias
+#   total         = 15 dias de salario normal
+#
+# Espera: { completeMonths: 6, vacationFraction: 7.5,
+#           bonusFraction: 7.5, totalDays: 15 }
+GET {{baseUrl}}/vacations/fraction?hireDate=2026-01-15&endDate=2026-07-15
+Accept: application/json
+
+
+### 2. 3 meses completos
+#   fraccion_vac  = 15 * (3/12) = 3.75 dias
+#   fraccion_bono = 15 * (3/12) = 3.75 dias
+# Espera: { completeMonths: 3, totalDays: 7.5 }
+GET {{baseUrl}}/vacations/fraction?hireDate=2026-01-15&endDate=2026-04-15
+Accept: application/json
+
+
+### 3. CLAVE — la fraccion de mes NO cuenta
+# Ingreso 2026-01-15, egreso 2026-04-10 -> 2 meses completos
+# (el tercero esta incompleto por 5 dias).
+# Espera: completeMonths = 2, NO 3.
+GET {{baseUrl}}/vacations/fraction?hireDate=2026-01-15&endDate=2026-04-10
+Accept: application/json
+
+
+### 4. Menos de 1 mes completo -> cero
+# Espera: { completeMonths: 0, totalDays: 0 }
+GET {{baseUrl}}/vacations/fraction?hireDate=2026-01-15&endDate=2026-02-10
+Accept: application/json
+
+
+### 5. 11 meses -> casi el anio completo pero aun fraccion
+# 15 * (11/12) = 13.75 dias de vacaciones
+# Espera: completeMonths = 11, sigue siendo fraccion (no 15 dias).
+GET {{baseUrl}}/vacations/fraction?hireDate=2026-01-15&endDate=2026-12-15
+Accept: application/json
+
+
+### ============================================================
+### ART. 195 — CAUSADAS NO DISFRUTADAS
+### ============================================================
+
+### 6. CLAVE — se pagan al salario de la TERMINACION
+# Requiere el empleado con antiguedad y un aumento registrado.
+# Cargar primero el aumento (paso 11 de 00-setup: 2000 -> 3000 con
+# vigencia 2026-10-01) y liquidar despues de esa fecha.
+#
+# Espera: todos los periodos valorados a salario_diario 100.0000
+#         (3000/30, el del egreso), NO a 66.6667 (el vigente cuando
+#         se causaron). Si los montos difieren entre periodos, se
+#         esta usando el salario historico y el calculo es incorrecto.
+GET {{baseUrl}}/vacations/pending-value/{{employeeAntiguoId}}?endDate=2026-10-31&explain=true
+Accept: application/json
+
+
+### 7. Desglose por periodo pendiente
+# Espera: cada periodo con sus days_earned propios (escalonados por
+#         antiguedad: 15, 16, 17, ...) pero todos con el MISMO
+#         normal_daily_salary.
+GET {{baseUrl}}/vacations/periods/{{employeeAntiguoId}}/pending
+Accept: application/json
+
+
+### ============================================================
+### COMBINACION EN LA LIQUIDACION
+### ============================================================
+
+### 8. Empleado con anios completos MAS una fraccion
+# Ingreso 2019-03-15, egreso 2026-08-27:
+#   7 anios completos (hasta 2026-03-15)
+#   + 5 meses de fraccion (marzo a agosto)
+#
+# Espera dos bloques separados:
+#   - periodos causados (con su escalonamiento)
+#   - fraccion del anio en curso (Art. 196)
+GET {{baseUrl}}/vacations/settlement-preview/{{employeeAntiguoId}}?endDate=2026-08-27
+Accept: application/json
+
+
+### 9. Los conceptos entran al desglose de la liquidacion
+# Espera: settlement_item separados para vacaciones y bono
+#         vacacional, cada uno con su article (195 o 196) y
+#         salary_basis = "normal".
+GET {{baseUrl}}/settlement/preview/{{employeeAntiguoId}}?endDate=2026-08-27
+Accept: application/json
+
+
+### 10. Fraccion tambien aplica al bono vacacional
+# Error comun: prorratear las vacaciones pero pagar el bono
+# completo, o viceversa. Ambos se prorratean igual (Art. 196).
+# Espera: vacationFraction y bonusFraction con el mismo divisor.
+GET {{baseUrl}}/vacations/fraction?hireDate=2026-01-15&endDate=2026-07-15&explain=true
+Accept: application/json

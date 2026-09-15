@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { TurnsService } from './turns.service';
@@ -16,9 +17,11 @@ import {
   updateTurnDoc,
   deleteTurnDoc,
 } from '@/docs/contexts/hr/turns';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Turns')
 @Controller('turns')
+@UseGuards(AuthenticationGuard)
 export class TurnsController {
   constructor(private readonly turnsService: TurnsService) {}
 

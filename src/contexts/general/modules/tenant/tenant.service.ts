@@ -7,7 +7,6 @@ import { hash } from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { generalQueries } from '@general/general.queries';
 import { hrQueries } from '@hr/hr.queries';
-import { encrypt } from '@/common/crypto/aes-256-gcm';
 import { StateService } from '../state/state.service';
 import { SpecialCodeService } from '../special_code/special_code.service';
 import { NewTenantDto } from './dto/newTenant.dto';
@@ -17,8 +16,7 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { UserCreationError } from '@/common/errors/user_create.error';
 import { CreateFullEmployeeError } from '@/common/errors/create_full_employee.error';
 
-const { tenant, branch, users, subscriptions, tenantHaciendaConfig } =
-  generalQueries;
+const { tenant, branch, users, subscriptions } = generalQueries;
 const { employee } = hrQueries;
 
 type TransactionClient = Awaited<ReturnType<Database['transaction']>>;
@@ -92,7 +90,7 @@ export class TenantService {
   }
 
   async createTenant(tenantInfo: NewTenantDto) {
-    if (tenantInfo.user && tenantInfo.hacienda && tenantInfo.subscription) {
+    if (tenantInfo.user && tenantInfo.subscription) {
       return this.createTenantWithOnboarding(tenantInfo);
     }
 
@@ -139,17 +137,16 @@ export class TenantService {
    * 1. Crear tenant
    * 2. Crear sucursal principal
    * 3. Crear usuario administrador + empleado
-   * 4. Guardar configuración de Hacienda (cifrada)
-   * 5. Crear customer y suscripción en Stripe
-   * 6. Registrar pago y suscripción en BD
-   * 7. Generar token JWT
+   * 4. Crear customer y suscripción en Stripe
+   * 5. Registrar pago y suscripción en BD
+   * 6. Generar token JWT
    *
    * Si cualquier paso falla, se revierte toda la transacción y se
    * compensa la suscripción en Stripe si ya se había creado.
    */
   private async createTenantWithOnboarding(tenantInfo: NewTenantDto) {
-    const { user, hacienda, subscription } = tenantInfo as Required<
-      Pick<NewTenantDto, 'user' | 'hacienda' | 'subscription'>
+    const { user, subscription } = tenantInfo as Required<
+      Pick<NewTenantDto, 'user' | 'subscription'>
     > &
       NewTenantDto;
     const branchInfo = tenantInfo.branch;
@@ -245,17 +242,7 @@ export class TenantService {
       ]);
       if (employeeRows.length === 0) throw new CreateFullEmployeeError();
 
-      // ── 4. Guardar configuración de Hacienda (cifrada) ────────────────────
-      await txn.query(tenantHaciendaConfig.create, [
-        tenantId,
-        encrypt(hacienda.hacienda_username),
-        encrypt(hacienda.hacienda_password),
-        hacienda.hacienda_client_id,
-        encrypt(hacienda.p12_base64),
-        encrypt(hacienda.p12_password),
-      ]);
-
-      // ── 5. Pago: Stripe o bypass por special_code ─────────────────────────
+      // ── 4. Pago: Stripe o bypass por special_code ─────────────────────────
       const usingSpecialCode = !!subscription.special_code;
       const tenantPaymentId = randomUUID();
 
@@ -350,7 +337,7 @@ export class TenantService {
         if (!clientSecret)
           throw new Error('Could not obtain payment client_secret from Stripe');
 
-        // ── 6. Registrar pago y suscripción en BD (misma transacción) ─────
+        // ── 5. Registrar pago y suscripción en BD (misma transacción) ─────
         await txn.query(tenant.updateStripeId, [tenantStripeId, tenantId]);
 
         await txn.rawQuery(
@@ -375,14 +362,14 @@ export class TenantService {
         ]);
       }
 
-      // ── 7. Commit ─────────────────────────────────────────────────────────
+      // ── 6. Commit ─────────────────────────────────────────────────────────
       await txn.commit();
       committed = true;
 
       // Registrar el nuevo tenant en el cache en memoria del StateService
       this.stateService.addTenant(newTenant);
 
-      // ── 8. Generar token JWT (post-commit, datos ya persisten) ────────────
+      // ── 7. Generar token JWT (post-commit, datos ya persisten) ────────────
       const userSession: IUserSession = {
         user_id: userId,
         email: user.email,

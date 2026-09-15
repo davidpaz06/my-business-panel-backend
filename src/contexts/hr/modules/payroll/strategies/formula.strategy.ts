@@ -4,103 +4,70 @@ import {
   IPayrollStrategy,
 } from '../interface/payroll-strategy.interface';
 
+/**
+ * Valor-hora normal (Art. 113): salario normal diario / horas de la
+ * jornada (Art. 173, ver JOURNEY_LIMITS en journey/interfaces).
+ */
+function hourlyRate(baseSalary: Decimal, journeyHours: Decimal): Decimal {
+  return baseSalary.dividedBy(30).dividedBy(journeyHours);
+}
+
+/**
+ * Bono nocturno (Art. 117). weightedHours ya viene de
+ * hr_schema.overtime_record con el rate_factor efectivo aplicado
+ * (1 + recargo_nocturno vigente al momento del registro): no se
+ * reaplica el recargo aqui, solo se valoriza a precio de hora normal.
+ */
+export class NightSurchargeStrategy implements IPayrollStrategy {
+  calculate(input: CalculatorInput): Decimal {
+    const journeyHours = new Decimal(input.context?.journeyHours || 8);
+    const weightedHours = new Decimal(
+      input.context?.nocturnaWeightedHours || 0,
+    );
+
+    if (weightedHours.isZero()) return new Decimal(0);
+
+    return hourlyRate(input.baseSalary, journeyHours)
+      .mul(weightedHours)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  }
+}
+
+/**
+ * Horas extraordinarias (Art. 118). El rate_factor por evento ya
+ * refleja 1.5x autorizado o 2.0x sin autorizacion de Inspectoria
+ * (doble recargo, Art. 182) — se persiste asi en overtime_record al
+ * crear el registro, no se recalcula en la planilla.
+ */
 export class OvertimeStrategy implements IPayrollStrategy {
   calculate(input: CalculatorInput): Decimal {
-    const base_salary = input.baseSalary;
+    const journeyHours = new Decimal(input.context?.journeyHours || 8);
+    const weightedHours = new Decimal(input.context?.extraWeightedHours || 0);
 
-    const multiplier = new Decimal(input.conceptValue || 1.5);
-    const isHolidayConcept = multiplier.equals(2.0);
+    if (weightedHours.isZero()) return new Decimal(0);
 
-    const hours = isHolidayConcept
-      ? input.context?.holidaysHours || new Decimal(0)
-      : input.context?.standardHours || new Decimal(0);
-    const hoursWorked = new Decimal(hours);
-
-    const turnType = new Decimal(input.context?.turnType || 8);
-
-    const dailyRate = base_salary.dividedBy(new Decimal(30));
-    const hourlyRate = dailyRate.dividedBy(turnType);
-
-    if (hoursWorked.isNegative() || hoursWorked.isZero()) {
-      return new Decimal(0);
-    }
-
-    const pay = hoursWorked.mul(hourlyRate).mul(multiplier);
-
-    return pay.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    return hourlyRate(input.baseSalary, journeyHours)
+      .mul(weightedHours)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   }
 }
 
-export class VacationsStrategy implements IPayrollStrategy {
+/**
+ * Feriado o dia de descanso trabajado (Art. 120). weightedHours trae
+ * el recargo del 50% ya aplicado por evento (overtime_record kind =
+ * 'feriado'); el pago del dia en si (no trabajado) se maneja aparte,
+ * como parte del salario base mensual.
+ */
+export class HolidayWorkedStrategy implements IPayrollStrategy {
   calculate(input: CalculatorInput): Decimal {
-    const earnings50week = new Decimal(input.context?.totalEarnings || 0);
-    const constantDivisive = new Decimal(input.conceptValue);
+    const journeyHours = new Decimal(input.context?.journeyHours || 8);
+    const weightedHours = new Decimal(input.context?.feriadoWeightedHours || 0);
 
-    if (earnings50week.isZero()) {
-      return new Decimal(0);
-    }
+    if (weightedHours.isZero()) return new Decimal(0);
 
-    const vacationsPay = earnings50week.dividedBy(constantDivisive);
-
-    return vacationsPay.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-  }
-}
-
-export class HolidayStrategy implements IPayrollStrategy {
-  calculate(input: CalculatorInput): Decimal {
-    const totalYear = new Decimal(input.context?.yearlySalary || 0);
-    const factor = new Decimal(input.conceptValue);
-
-    if (totalYear.isZero()) {
-      return new Decimal(0);
-    }
-
-    const holidayPay = totalYear.dividedBy(factor);
-
-    return holidayPay.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-  }
-}
-
-export class ISRDeduction implements IPayrollStrategy {
-  calculate(input: CalculatorInput): Decimal {
-    const currentGross = input.context?.gross || new Decimal(0);
-    let val: Decimal;
-
-    if (input.context?.has_ccss) {
-      const gross = currentGross.mul(new Decimal(0.1083));
-      val = currentGross.minus(gross);
-    } else {
-      val = currentGross;
-    }
-
-    const brackets = [
-      { upTo: new Decimal(929000), taxApply: new Decimal(0) },
-      { upTo: new Decimal(1363000), taxApply: new Decimal(0.1) },
-      { upTo: new Decimal(2392000), taxApply: new Decimal(0.15) },
-      { upTo: new Decimal(4783000), taxApply: new Decimal(0.2) },
-      { upTo: null, taxApply: new Decimal(0.25) },
-    ];
-
-    let totalTax = new Decimal(0);
-    let previousLimit = new Decimal(0);
-
-    for (const b of brackets) {
-      if (val.gt(previousLimit)) {
-        const upperLimit = b.upTo ? b.upTo : val;
-
-        const bracketTax = Decimal.min(val, upperLimit).minus(previousLimit);
-
-        if (bracketTax.gt(0)) {
-          totalTax = totalTax.plus(bracketTax.mul(b.taxApply));
-        }
-
-        previousLimit = upperLimit;
-      } else {
-        break;
-      }
-    }
-
-    return totalTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    return hourlyRate(input.baseSalary, journeyHours)
+      .mul(weightedHours)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   }
 }
 
@@ -131,8 +98,11 @@ export class IncapacityDeductionStrategy implements IPayrollStrategy {
 
     const incapacityDeduction = dailyRate.mul(days);
 
-    return incapacityDeduction
-      .mul(new Decimal(-1))
-      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    // El motor de calculo (calc-engine.service.ts) ya RESTA
+    // totalDeductions en la formula final del neto; las estrategias de
+    // tipo 'deduction' deben devolver magnitud POSITIVA. Multiplicar
+    // por -1 aqui invertia el efecto: la deduccion terminaba SUMANDO
+    // al neto en vez de restar.
+    return incapacityDeduction.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
   }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { PayrollService } from './service/payroll.service';
 import {
@@ -10,9 +10,13 @@ import {
   createPaysheetDoc,
   processPayrollDoc,
 } from '@/docs/contexts/hr/payroll';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
 
 @ApiTags('Payroll')
 @Controller('payroll')
+@UseGuards(AuthenticationGuard)
 export class PayrollController {
   constructor(
     private readonly payrollService: PayrollService,
@@ -24,8 +28,11 @@ export class PayrollController {
   @ApiResponse(createPaysheetDoc.responses[400])
   @ApiResponse(createPaysheetDoc.responses[401])
   @Post('create')
-  async createPaysheet(@Body() body: CreatePaysheetDto) {
-    return this.payrollService.createPaysheetHeader(body);
+  async createPaysheet(
+    @Body() body: CreatePaysheetDto,
+    @Session() user: IUserSession,
+  ) {
+    return this.payrollService.createPaysheetHeader(user.tenant_id, body);
   }
 
   @ApiOperation(processPayrollDoc.operation)
@@ -37,13 +44,15 @@ export class PayrollController {
   async processPayroll(
     @Param('id') id: string,
     @Body() body: ProcessPaysheetDto,
+    @Session() user: IUserSession,
   ) {
     return this.payrollService.processPayrollForEmployee(
       id,
       body.branch_id,
-      body.tenant_id,
+      user.tenant_id,
       body.period_start,
       body.period_end,
+      body.payment_method_id,
     );
   }
 }

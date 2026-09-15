@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { TardinessService } from './tardiness.service';
 import {
@@ -6,9 +6,11 @@ import {
   getTardinessByBranchDoc,
   getTardinessByDateRangeDoc,
 } from '@/docs/contexts/hr/tardiness';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
 @ApiTags('Tardiness')
 @Controller('tardiness')
+@UseGuards(AuthenticationGuard)
 export class TardinessController {
   constructor(private readonly tardinessService: TardinessService) {}
 

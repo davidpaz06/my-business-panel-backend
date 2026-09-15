@@ -13,8 +13,7 @@ import { CustomerPaymentService } from '../../../general/modules/customer_paymen
 import { Condition, SaleFromDb } from './interface/sale.interface';
 import { SaleCreationError } from '@/common/errors/sale_creation.error';
 import { paginate } from '@/common/utilities/paginator';
-import { EInvoiceService } from '../e-invoice/e-invoice.service';
-import { DInvoiceService } from '../d-invoice/d-invoice.service';
+import { InvoiceService } from '../invoice/invoice.service';
 import { AccountingJournalService } from '../../../finances/modules/accounting/accounting-journal.service';
 import { SaleItemService } from '../sale-item/sale-item.service';
 import { WarehouseService } from '@/contexts/inventory/modules/warehouse/warehouse.service';
@@ -30,8 +29,7 @@ export class SaleService {
     private readonly saleItemService: SaleItemService,
     private readonly customerPaymentService: CustomerPaymentService,
     private readonly warehouseService: WarehouseService,
-    private readonly eInvoiceService: EInvoiceService,
-    private readonly dInvoiceService: DInvoiceService,
+    private readonly invoiceService: InvoiceService,
     private readonly journalService: AccountingJournalService,
   ) {}
 
@@ -46,7 +44,6 @@ export class SaleService {
         data.tax_amount,
         data.total_amount,
         data.is_completed,
-        data.has_electronic_invoice,
         null, // seller_user_id
       ],
       { rows } = await this.db.query(sales.createSale, params);
@@ -113,7 +110,6 @@ export class SaleService {
           data.tax_amount,
           data.total_amount,
           effectiveIsCompleted,
-          data.has_electronic_invoice,
           data.seller_user_id ?? null,
         ]);
         saleId = rows[0].sale_id;
@@ -236,7 +232,7 @@ export class SaleService {
           }
         }
 
-        await this.dInvoiceService.createDInvoice(
+        await this.invoiceService.createInvoice(
           {
             tenant_customer_id: data.tenant_customer_id ?? null,
             currency_id: data.currency_id,
@@ -453,20 +449,6 @@ export class SaleService {
         }
       }
 
-      if (data.has_electronic_invoice) {
-        try {
-          await this.eInvoiceService.createEInvoiceForSale(saleId);
-        } catch (eInvoiceError) {
-          this.logger.error(
-            `E-invoice generation failed for sale ${saleId}: ${(eInvoiceError as Error).message}`,
-          );
-          return {
-            saleId,
-            eInvoiceWarning: 'No se pudo generar la factura electrónica',
-          };
-        }
-      }
-
       return { saleId };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
@@ -487,14 +469,11 @@ export class SaleService {
       dbClient: this.db,
       table: `
         (SELECT s.sale_id, s.sale_date, s.total_amount, s.subtotal_amount, s.tax_amount,
-          s.is_completed, s.has_electronic_invoice, s.is_refunded, s.tenant_customer_id,
+          s.is_completed, s.is_refunded, s.tenant_customer_id,
           s.created_at, b.branch_id, b.branch_name, c.currency_code, c.symbol, b.tenant_id,
           (SELECT rt.return_transaction_id FROM pos_schema.return_transaction rt
-            LEFT JOIN pos_schema.digital_sale_invoice dsi
-              ON dsi.digital_sale_invoice_id = rt.digital_sale_invoice_id
-            LEFT JOIN pos_schema.electronic_sale_invoice esi
-              ON esi.electronic_sale_invoice_id = rt.electronic_sale_invoice_id
-            WHERE dsi.sale_id = s.sale_id OR esi.sale_id = s.sale_id LIMIT 1
+            INNER JOIN pos_schema.invoice inv ON inv.invoice_id = rt.invoice_id
+            WHERE inv.sale_id = s.sale_id LIMIT 1
           ) AS return_transaction_id
         FROM pos_schema.sale s
         INNER JOIN general_schema.branch b USING(branch_id)
@@ -508,7 +487,6 @@ export class SaleService {
         'subtotal_amount',
         'tax_amount',
         'is_completed',
-        'has_electronic_invoice',
         'is_refunded',
         'branch_id',
         'branch_name',

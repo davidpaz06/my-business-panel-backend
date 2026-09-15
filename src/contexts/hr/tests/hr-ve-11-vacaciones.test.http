@@ -1,0 +1,172 @@
+### ============================================================
+### HR-VE-11 · Vacaciones (Arts. 121, 190 LOTTT)
+### ============================================================
+### Que mide: los dias habiles de vacaciones que causa el trabajador
+### y su pago.
+###
+### EXCEPCION POR ANTIGUEDAD — escalonamiento (Art. 190):
+###   Al cumplir 1 anio       -> 15 dias habiles
+###   Cada anio sucesivo      -> +1 dia adicional
+###   Tope de 15 adicionales  -> maximo 30 dias (al anio 16)
+###
+###   dias = 15 + min(anios_completos - 1, 15)
+###
+### El derecho NACE al cumplir el anio: antes es CERO (para el caso
+### de terminacion antes del anio, ver HR-VE-13, Art. 196).
+###
+### Base salarial: salario NORMAL del mes anterior al disfrute
+### (Art. 121). Nunca el salario integral.
+###
+### Cambio frente a Costa Rica: alla eran 2 semanas por 50 semanas
+### trabajadas, y el sistema pagaba vacaciones en CADA corrida de
+### nomina. Aqui el derecho se causa y se disfruta por periodo.
+###
+### ESTADO: Fase 3 del roadmap (submodulo vacations).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId = e366b534-4320-42e6-a5db-6e9290cc4969
+
+# Empleado con antiguedad (ingreso 2019-03-15). Se crea en la FASE 0
+# de 00-setup.test.http; copiar aqui el UUID devuelto.
+@employeeAntiguoId = 00000000-0000-0000-0000-000000000000
+@periodId   = 00000000-0000-0000-0000-000000000000
+
+
+### ============================================================
+### ESCALONAMIENTO POR ANTIGUEDAD (Art. 190)
+### ============================================================
+
+### 1. Menos de 1 anio -> 0 dias (el derecho aun no nace)
+# Espera: { days: 0, rightVested: false }
+GET {{baseUrl}}/vacations/entitlement?years=0
+Accept: application/json
+
+
+### 2. Anio 1 -> 15 dias habiles
+# Espera: { days: 15, rightVested: true }
+GET {{baseUrl}}/vacations/entitlement?years=1
+Accept: application/json
+
+
+### 3. Anio 2 -> 16 dias
+# Espera: { days: 16 }
+GET {{baseUrl}}/vacations/entitlement?years=2
+Accept: application/json
+
+
+### 4. Anio 5 -> 19 dias
+# 15 + min(5-1, 15) = 15 + 4 = 19
+# Espera: { days: 19 }
+GET {{baseUrl}}/vacations/entitlement?years=5
+Accept: application/json
+
+
+### 5. Anio 16 -> 30 dias (tope alcanzado)
+# 15 + min(16-1, 15) = 15 + 15 = 30
+# Espera: { days: 30, capped: true }
+GET {{baseUrl}}/vacations/entitlement?years=16
+Accept: application/json
+
+
+### 6. Anio 25 -> sigue en 30 dias
+# Espera: { days: 30, capped: true }
+GET {{baseUrl}}/vacations/entitlement?years=25
+Accept: application/json
+
+
+### ============================================================
+### PERIODOS CAUSADOS DEL EMPLEADO
+### ============================================================
+
+### 7. Generar los periodos vacacionales
+# Empleado con ingreso 2019-03-15: debe causar un periodo por cada
+# aniversario cumplido.
+# Espera: periodos con days_earned creciente (15, 16, 17, ...).
+POST {{baseUrl}}/vacations/periods/generate
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeAntiguoId}}",
+  "until": "2026-08-27"
+}
+
+
+### 8. Consultar los periodos
+# Espera: una fila por anio de servicio con status "causado".
+GET {{baseUrl}}/vacations/periods/{{employeeAntiguoId}}
+Accept: application/json
+
+
+### ============================================================
+### DISFRUTE Y PAGO
+### ============================================================
+
+### 9. Registrar el disfrute de un periodo
+# Base salarial: salario normal del mes ANTERIOR al disfrute (Art. 121).
+# Espera: status = "disfrutando", normal_daily_salary registrado.
+POST {{baseUrl}}/vacations/periods/{{periodId}}/enjoy
+Content-Type: application/json
+
+{
+  "enjoyed_from": "2026-09-01",
+  "enjoyed_to": "2026-09-21"
+}
+
+
+### 10. Calcular el monto de las vacaciones
+# salario_normal_diario 66.6667, 21 dias causados (7 anios)
+#   monto = 66.6667 * 21 = 1400.00
+# Espera: { days: 21, dailySalary: 66.6667, amount: 1400.0000,
+#           salaryBasis: "normal", article: "190" }
+GET {{baseUrl}}/vacations/periods/{{periodId}}/amount
+Accept: application/json
+
+
+### 11. Verificar que NO usa salario integral
+# Con integral (75.0000) el monto seria 1575.00 en vez de 1400.00.
+# Espera: salaryBasis = "normal", baseDaily = 66.6667
+GET {{baseUrl}}/vacations/periods/{{periodId}}/amount?explain=true
+Accept: application/json
+
+
+### 12. RECHAZO — disfrutar mas dias de los causados
+# Espera: 400. days_taken no puede superar days_earned.
+POST {{baseUrl}}/vacations/periods/{{periodId}}/enjoy
+Content-Type: application/json
+
+{
+  "enjoyed_from": "2026-09-01",
+  "enjoyed_to": "2026-10-15"
+}
+
+
+### ============================================================
+### VACACIONES CAUSADAS NO DISFRUTADAS (Art. 195)
+### ============================================================
+
+### 13. Periodos pendientes de disfrute
+# Si la relacion termina sin disfrutarlas, se pagan al salario
+# normal de la TERMINACION, no al del periodo causado.
+# Espera: lista de periodos en status "causado".
+GET {{baseUrl}}/vacations/periods/{{employeeAntiguoId}}/pending
+Accept: application/json
+
+
+### 14. Valoracion de lo pendiente a la fecha de egreso
+# Espera: el monto se calcula con el salario normal vigente al
+#         egreso (Art. 195), no con el de cada anio causado.
+GET {{baseUrl}}/vacations/pending-value/{{employeeAntiguoId}}?endDate=2026-12-31
+Accept: application/json
+
+
+### ============================================================
+### COMPENSACION POR TURNOS CONTINUOS (Art. 176)
+### ============================================================
+
+### 15. Dia adicional por semanas de 6 dias
+# En trabajo continuo por turnos, las semanas de 6 dias se
+# compensan con 1 dia adicional de vacaciones.
+# Espera: { baseDays, compensatoryDays, totalDays }
+GET {{baseUrl}}/vacations/entitlement/{{employeeAntiguoId}}?includeShiftCompensation=true
+Accept: application/json

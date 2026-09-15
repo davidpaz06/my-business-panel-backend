@@ -13,6 +13,10 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { EmployeeService } from './employee.service';
 import { NewEmployeeDto } from './dto/newEmployeeDto.dto';
 import { UpdateEmployeeDto } from './dto/updateEmployee.dto';
+import {
+  TerminateEmployeeDto,
+  UpdateTerminationDto,
+} from './dto/terminateEmployee.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import {
   getEmployeesByTenantDoc,
@@ -90,6 +94,22 @@ export class EmployeeController {
     @Body() data: UpdateEmployeeDto,
   ) {
     return this.employeeService.updateEmployeeInfo(id, data);
+  }
+
+  @Post(':id/terminate')
+  async terminateEmployee(
+    @Param('id') id: string,
+    @Body() data: TerminateEmployeeDto,
+  ) {
+    return this.employeeService.terminate(id, data);
+  }
+
+  @Patch(':id/termination')
+  async updateTermination(
+    @Param('id') id: string,
+    @Body() data: UpdateTerminationDto,
+  ) {
+    return this.employeeService.updateTermination(id, data);
   }
 
   @ApiOperation(deactivateEmployeeDoc.operation)

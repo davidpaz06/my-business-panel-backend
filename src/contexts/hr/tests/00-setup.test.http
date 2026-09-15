@@ -1,0 +1,240 @@
+### ============================================================
+### SETUP — Modulo RRHH Venezuela (LOTTT)
+### ============================================================
+### Bootstrap comun a todos los tests HR-VE-01..18.
+### Ejecutar SIEMPRE primero.
+###
+### Referencia legal: Decreto con Rango, Valor y Fuerza de Ley
+### Organica del Trabajo, los Trabajadores y las Trabajadoras
+### (Gaceta Oficial N 6.076 Extraordinario, 07-05-2012).
+###
+### ESTADO: los endpoints de este archivo pertenecen a la Fase 1 del
+### roadmap (parametros y salario). Los que aun no existen devuelven
+### 404 hasta que se implemente el submodulo correspondiente.
+###
+### Requisitos previos:
+###   1. Migraciones hr 006..018 aplicadas.
+###   2. Seeds hr 003 (feriados VE), 004 (conceptos LOTTT) y
+###      006 (parametros LOTTT) cargados.
+###   3. Servidor corriendo: npm run start:dev
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+
+# ─── Tenant real: MEmpresa S.A. ──────────────────────────────
+@tenantId    = a57174b6-c757-4bb9-bae2-ea4e7ffa6088
+@branchId    = 8aa62c84-a07a-4ea5-a6df-523ab22089b0
+@branchId2   = 98d4eb99-5354-485a-96cc-12c4785a3d01
+@turnId      = 3
+
+# ─── Empleado existente: Jose Carrasco ───────────────────────
+# Ingreso 2026-06-19, salario 2000.00, jornada 8 h.
+# ATENCION: solo ~2 meses de antiguedad. Cae en la excepcion del
+# Art. 142.e y NO sirve para probar escalonamientos por antiguedad.
+@employeeId  = e366b534-4320-42e6-a5db-6e9290cc4969
+@contractId  = 78119672-ab56-4b29-acf2-fcf84674e9c9
+
+# ─── Empleado con antiguedad (crear en FASE 0) ───────────────
+# Necesario para HR-VE-05 (142.b), HR-VE-11 (190), HR-VE-12 (192)
+# y HR-VE-13. Ingreso 2019-03-15 -> 7 anios al 2026-08-27.
+@employeeAntiguoId = 00000000-0000-0000-0000-000000000000
+
+
+### ============================================================
+### CIFRAS BASE — salario 2000.00, jornada 8 h
+### ============================================================
+### Todos los montos esperados en los demas archivos derivan de aqui.
+###
+###   salario_diario  = 2000 / 30        =  66.6667   (Art. 113)
+###   valor_hora      = 66.6667 / 8      =   8.3333
+###
+###   alicuota_utilidades = (66.6667 * 30) / 360 =  5.5556
+###   alicuota_bono_vacac = (66.6667 * 15) / 360 =  2.7778
+###   salario_integral    = 66.6667 + 5.5556 + 2.7778 = 75.0000
+###
+### El divisor 360 es el anio comercial: reparte el beneficio anual
+### (expresado en dias) sobre el anio (Art. 122).
+### ============================================================
+
+
+### ============================================================
+### FASE 0 — BOOTSTRAP SQL (solo primera vez)
+### ============================================================
+### El tenant, la sucursal y el turno YA EXISTEN (ver variables
+### arriba). Solo falta el empleado con antiguedad para los tests
+### de escalonamiento.
+###
+###   SELECT hr_schema.create_new_employee(
+###     DATE '2019-03-15',   -- ingreso: 7 anios de antiguedad
+###     NULL,                -- contrato por tiempo indefinido
+###     40, 2000.00, 'Cajero', 8,
+###     3,                                       -- turn_id
+###     NULL,                                    -- user_id
+###     'a57174b6-c757-4bb9-bae2-ea4e7ffa6088',  -- tenant
+###     'Maria', 'Rodriguez', 'V-12345678',
+###     '0412-1112233', 'maria.rodriguez@mempresa.test', 1,
+###     '8aa62c84-a07a-4ea5-a6df-523ab22089b0',  -- branch
+###     1, NULL
+###   );
+###   -- copiar el UUID devuelto en @employeeAntiguoId
+###
+### La funcion crea el contrato, el empleado con hire_date y abre
+### automaticamente salary_history (migracion 008).
+###
+### Verificar que quedo bien:
+###   SELECT e.first_name, e.hire_date, c.journey_type,
+###          c.weekly_hours, c.end_date, sh.monthly_salary
+###   FROM hr_schema.employee e
+###   JOIN hr_schema.contract c USING (contract_id)
+###   JOIN hr_schema.salary_history sh USING (employee_id)
+###   WHERE e.tenant_id = 'a57174b6-c757-4bb9-bae2-ea4e7ffa6088';
+###   -- end_date debe ser NULL (contrato indefinido)
+###   -- journey_type 'diurna', weekly_hours 40
+### ============================================================
+
+
+### ============================================================
+### FASE 1 — PARAMETROS DEL TENANT
+### ============================================================
+
+### 1. Listar parametros vigentes
+# El seed 006 siembra los pisos legales de la LOTTT.
+# Espera: 22 parametros con source = 'Piso legal LOTTT'.
+GET {{baseUrl}}/payroll-parameters
+Accept: application/json
+
+
+### 2. Resolver un parametro a una fecha dada
+# Resolucion temporal: devuelve el vigente a esa fecha, no el
+# ultimo insertado.
+# Espera: param_value = 30 (dias de utilidades, Art. 131).
+GET {{baseUrl}}/payroll-parameters/resolve/dias_utilidades?date=2026-08-27
+Accept: application/json
+
+
+### 3. Cargar la tasa activa BCV (OBLIGATORIO)
+# No tiene piso legal sembrado: la determina el BCV tomando como
+# referencia los seis principales bancos del pais.
+# Sin este valor fallan HR-VE-06 y HR-VE-07 (intereses y mora).
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "tasa_activa_bcv",
+  "param_value": 0.585,
+  "valid_from": "2026-01-01",
+  "source": "Aviso BCV enero 2026"
+}
+
+
+### 4. Cargar el salario minimo nacional (OBLIGATORIO)
+# Lo fija el Ejecutivo por decreto (Art. 129). Sin el no se puede
+# validar el minimo ni calcular la diferencia del Art. 130.
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "salario_minimo_nacional",
+  "param_value": 130.00,
+  "valid_from": "2026-01-01",
+  "source": "Decreto vigente"
+}
+
+
+### 5. RECHAZO — valor por debajo del piso legal
+# Espera: 400. dias_utilidades no puede bajar de 30 (Art. 131).
+# La LOTTT es de orden publico e irrenunciable (Arts. 2, 19): una
+# convencion colectiva solo puede MEJORAR el minimo (Arts. 18.2, 434).
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "dias_utilidades",
+  "param_value": 20,
+  "valid_from": "2026-01-01",
+  "source": "CCT invalida"
+}
+
+
+### 6. Mejorar un minimo por convencion colectiva
+# Espera: 201. Hacia arriba si se permite.
+# OJO: esto cambia el salario integral (mas alicuota de utilidades).
+# Los montos de los demas archivos asumen el PISO LEGAL de 30 dias.
+# Ejecutar este paso solo cuando se quiera probar el escenario CCT.
+POST {{baseUrl}}/payroll-parameters
+Content-Type: application/json
+
+{
+  "param_key": "dias_utilidades",
+  "param_value": 60,
+  "valid_from": "2027-01-01",
+  "source": "CCT 2027"
+}
+
+
+### ============================================================
+### FASE 2 — SALARIO Y ALICUOTAS (Arts. 104, 113, 122)
+### ============================================================
+
+### 7. Historial salarial del empleado
+# La migracion 008 hizo backfill del salario del contrato.
+# Espera: 1 registro, monthly_salary = 2000.0000,
+#         valid_from = 2026-06-19 (fecha de ingreso).
+GET {{baseUrl}}/salary-history/employee/{{employeeId}}
+Accept: application/json
+
+
+### 8. Salario normal diario (Art. 104 / 113)
+# Espera: { monthlySalary: 2000.0000, dailySalary: 66.6667,
+#           hourlyRate: 8.3333 }
+GET {{baseUrl}}/salary/{{employeeId}}/normal?date=2026-08-27
+Accept: application/json
+
+
+### 9. CLAVE — salario integral diario (Art. 122)
+#   salario_diario      = 2000 / 30            = 66.6667
+#   alicuota_utilidades = (66.6667 * 30) / 360 =  5.5556
+#   alicuota_bono_vacac = (66.6667 * 15) / 360 =  2.7778
+#   salario_integral                            = 75.0000
+#
+# Espera: { dailySalary: 66.6667, alicuotaUtilidades: 5.5556,
+#           alicuotaBonoVacacional: 2.7778, integralDaily: 75.0000 }
+GET {{baseUrl}}/salary/{{employeeId}}/integral?date=2026-08-27
+Accept: application/json
+
+
+### 10. Los dos no son intercambiables
+# REGLA DE ORO: salario normal (Art. 104) para recargos, feriados,
+# vacaciones y bono vacacional. Salario integral (Art. 122) SOLO
+# para prestaciones e indemnizaciones.
+# Diferencia en este caso: 66.6667 vs 75.0000 por dia.
+GET {{baseUrl}}/salary/{{employeeId}}/integral?date=2026-08-27&explain=true
+Accept: application/json
+
+
+### 11. Registrar un aumento
+# Cierra la vigencia anterior y abre una nueva.
+# OJO: los montos de los demas archivos asumen 2000.00. Ejecutar
+# este paso al final, o recalcular los esperados.
+POST {{baseUrl}}/salary-history
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "monthly_salary": 3000.00,
+  "valid_from": "2026-10-01",
+  "reason": "Aumento por decreto de salario minimo"
+}
+
+
+### 12. El salario se resuelve por fecha, no por ultimo registro
+# Espera: consultado a 2026-08-27 sigue devolviendo 2000.0000
+#         aunque exista un registro posterior de 3000.00.
+GET {{baseUrl}}/salary/{{employeeId}}/normal?date=2026-08-27
+Accept: application/json
+
+
+### 13. Y a partir de la nueva vigencia devuelve el nuevo
+# Espera: monthlySalary = 3000.0000, dailySalary = 100.0000
+GET {{baseUrl}}/salary/{{employeeId}}/normal?date=2026-10-15
+Accept: application/json

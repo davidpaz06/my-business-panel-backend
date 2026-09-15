@@ -3,7 +3,7 @@ export interface Product {
   tenant_id: string;
   sku: string;
   variant_name: string;
-  cabys_code?: string;
+  product_id?: string;
   unit_price: number;
   cost_price?: number;
   weighted_avg_cost?: number;

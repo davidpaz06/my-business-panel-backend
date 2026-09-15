@@ -9,7 +9,7 @@ export const createNewProductDoc = {
           tenant_id: '123e4567-e89b-12d3-a456-426614174000',
           sku: 'SKU-001',
           variant_name: 'Red T-Shirt M',
-          cabys_code: '9999999999999',
+          product_id: '123e4567-e89b-12d3-a456-426614174111',
           unit_price: 15000,
         },
       ],

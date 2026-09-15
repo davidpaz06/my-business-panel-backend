@@ -1,0 +1,181 @@
+### ============================================================
+### HR-VE-18 · Cuotas sindicales (Arts. 412, 413 LOTTT)
+### ============================================================
+### Que mide: el descuento de las cuotas sindicales y su entrega a
+### la organizacion.
+###
+### Reglas:
+###   - Art. 412: si el trabajador esta afiliado y lo AUTORIZO, el
+###     patrono descuenta las cuotas ordinarias y extraordinarias y
+###     las entrega a la organizacion sindical MEDIANTE CHEQUE A SU
+###     NOMBRE (no en efectivo ni a un tercero).
+###   - Art. 413: el descuento requiere AUTORIZACION EXPRESA del
+###     trabajador. Sin ella el descuento es improcedente.
+###
+### La autorizacion es una condicion de validez, no un tramite
+### administrativo: por eso el schema la impone con un CHECK
+### (chk_employee_deduction_sindical_autorizada) y no solo con una
+### validacion de aplicacion.
+###
+### ESTADO: Fase 3 del roadmap (submodulo deductions).
+### ============================================================
+
+@baseUrl = http://localhost:3000/api/v1
+@employeeId  = e366b534-4320-42e6-a5db-6e9290cc4969
+@deductionId = 00000000-0000-0000-0000-000000000000
+
+
+### ============================================================
+### AUTORIZACION EXPRESA (Art. 413)
+### ============================================================
+
+### 1. CLAVE — RECHAZO: cuota sindical SIN autorizacion
+# Espera: 400. El descuento sin autorizacion expresa es
+# improcedente (Art. 413). La restriccion existe tambien a nivel de
+# base de datos, por lo que debe fallar incluso si la validacion de
+# aplicacion se omitiera.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "sindical",
+  "description": "Cuota sindical ordinaria",
+  "total_amount": 1200.00,
+  "installment_amount": 100.00,
+  "union_organization": "Sindicato de Trabajadores del Comercio",
+  "authorized": false,
+  "start_date": "2026-08-01"
+}
+
+
+### 2. RECHAZO — autorizada pero sin fecha de autorizacion
+# Espera: 400. authorized = true exige authorization_date.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "sindical",
+  "description": "Cuota sindical sin fecha",
+  "total_amount": 1200.00,
+  "installment_amount": 100.00,
+  "union_organization": "Sindicato de Trabajadores del Comercio",
+  "authorized": true,
+  "start_date": "2026-08-01"
+}
+
+
+### 3. Cuota sindical ORDINARIA con autorizacion valida
+# Espera: 201.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "sindical",
+  "description": "Cuota sindical ordinaria mensual",
+  "total_amount": 1200.00,
+  "installment_amount": 100.00,
+  "union_organization": "Sindicato de Trabajadores del Comercio",
+  "authorized": true,
+  "authorization_date": "2026-07-20",
+  "authorization_ref": "Carta de afiliacion 2026-0087",
+  "start_date": "2026-08-01"
+}
+
+
+### 4. Cuota EXTRAORDINARIA
+# El Art. 412 cubre ordinarias y extraordinarias por igual.
+# Espera: 201.
+POST {{baseUrl}}/deductions
+Content-Type: application/json
+
+{
+  "employee_id": "{{employeeId}}",
+  "kind": "sindical",
+  "description": "Cuota extraordinaria - fondo de solidaridad",
+  "total_amount": 500.00,
+  "installment_amount": 500.00,
+  "union_organization": "Sindicato de Trabajadores del Comercio",
+  "authorized": true,
+  "authorization_date": "2026-08-05",
+  "authorization_ref": "Asamblea extraordinaria acta 12",
+  "start_date": "2026-09-01"
+}
+
+
+### ============================================================
+### REVOCACION DE LA AUTORIZACION
+### ============================================================
+
+### 5. El trabajador revoca su autorizacion
+# El descuento debe cesar: la autorizacion es revocable.
+# Espera: 200, is_active = false o end_date fijada.
+PATCH {{baseUrl}}/deductions/{{deductionId}}
+Content-Type: application/json
+
+{
+  "authorized": false,
+  "is_active": false,
+  "end_date": "2026-10-31"
+}
+
+
+### 6. Tras la revocacion no se aplica en la nomina
+# Espera: la deduccion no aparece entre las activas de noviembre.
+GET {{baseUrl}}/deductions/{{employeeId}}?active=true&date=2026-11-15
+Accept: application/json
+
+
+### ============================================================
+### ENTREGA A LA ORGANIZACION (Art. 412)
+### ============================================================
+
+### 7. Consolidado a entregar al sindicato
+# El Art. 412 exige entregar lo descontado mediante cheque a nombre
+# de la organizacion sindical.
+# Espera: { unionOrganization, period, totalWithheld,
+#           employeeCount, deliveryMethod: "cheque" }
+GET {{baseUrl}}/deductions/union-remittance?period=2026-09&organization=Sindicato de Trabajadores del Comercio
+Accept: application/json
+
+
+### 8. Registrar la entrega
+# Espera: 201 con la referencia del cheque.
+POST {{baseUrl}}/deductions/union-remittance
+Content-Type: application/json
+
+{
+  "union_organization": "Sindicato de Trabajadores del Comercio",
+  "period": "2026-09",
+  "amount": 1500.00,
+  "check_number": "CHQ-2026-0912",
+  "delivered_at": "2026-10-05"
+}
+
+
+### 9. Historico de entregas
+# Trazabilidad de lo descontado frente a lo entregado.
+# Espera: withheld y delivered deben cuadrar por periodo.
+GET {{baseUrl}}/deductions/union-remittance?organization=Sindicato de Trabajadores del Comercio
+Accept: application/json
+
+
+### ============================================================
+### INTERACCION CON EL TOPE DEL ART. 154
+### ============================================================
+
+### 10. La cuota sindical consume margen de descuento
+# A diferencia de la pension alimentaria (Art. 152), la cuota
+# sindical no es excepcion a los topes ordinarios.
+# Espera: currentlyApplied incluye la cuota sindical.
+GET {{baseUrl}}/deductions/{{employeeId}}/available-margin?date=2026-09-15
+Accept: application/json
+
+
+### 11. Todas las deducciones vigentes del trabajador
+# Espera: deuda_patrono, sindical y alimentaria diferenciadas por
+#         kind, cada una con su tratamiento de tope.
+GET {{baseUrl}}/deductions/{{employeeId}}
+Accept: application/json

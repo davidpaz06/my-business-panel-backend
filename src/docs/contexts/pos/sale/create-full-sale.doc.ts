@@ -41,10 +41,6 @@ export const createFullSaleDoc = {
       description: 'Indica si la venta se completó.',
       example: true,
     },
-    has_electronic_invoice: {
-      description: 'Si es true, se genera factura electrónica al finalizar.',
-      example: false,
-    },
     seller_user_id: {
       description: 'UUID del usuario vendedor. Opcional.',
       example: 'd4e5f6a1-b2c3-4567-defa-123456789012',

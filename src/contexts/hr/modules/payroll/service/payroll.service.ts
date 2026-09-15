@@ -16,7 +16,14 @@ import {
   Incapacities,
   PayrollConceptRow,
 } from '../interface/payroll-db.interface';
+import { JOURNEY_LIMITS } from '../../journey/interfaces/journey-limits.interface';
 import Decimal from 'decimal.js';
+
+interface OvertimeTotals {
+  nocturnaWeightedHours: number;
+  extraWeightedHours: number;
+  feriadoWeightedHours: number;
+}
 
 const { payroll } = hrQueries;
 
@@ -37,6 +44,7 @@ export class PayrollService {
     tenantId: string,
     periodStart: string,
     periodEnd: string,
+    paymentMethodId: number,
   ) {
     const concepts = await this.repo.getConceptsPerTenant(tenantId);
     const incomes = concepts.filter((c) => c.type === 'earning');
@@ -66,8 +74,6 @@ export class PayrollService {
       ]),
     );
 
-    const holidays = await this.repo.getHolidays();
-
     const employees = await this.repo.getEmployeeContractForPayroll(
       tenantId,
       branchId,
@@ -79,36 +85,36 @@ export class PayrollService {
       );
     }
 
-    const hoursWorked = await this.repo.getHoursWorked(
+    // Horas con recargo del periodo (Arts. 117, 118, 120), ya factorizadas
+    // por evento en hr_schema.overtime_record (1+recargo, o el doble sin
+    // autorizacion de Inspectoria en horas extra, Art. 182).
+    const overtimeSummary = await this.repo.getOvertimeSummary(
       branchId,
       periodStart,
       periodEnd,
     );
 
-    const yearly = await this.repo.getYearlySalary(branchId);
+    const overtimeMap = new Map<string, OvertimeTotals>();
 
-    const historicalEarnings = await this.repo.getHistoricalEarnings(branchId);
-
-    const hoursMap = new Map<string, { total: number; work_date: string }[]>();
-
-    hoursWorked.forEach((hw) => {
-      const current = hoursMap.get(hw.employee_id) || [];
-      current.push({ total: Number(hw.total_hours), work_date: hw.work_date });
-      hoursMap.set(hw.employee_id, current);
-    });
-
-    const yearlyMap = new Map<string, number>(
-      yearly.map((y) => [y.employee_id, y.total]),
-    );
-
-    const historicalEarningsMap = new Map<string, number>(
-      historicalEarnings.map((h) => [h.employee_id, h.gross]),
-    );
+    for (const row of overtimeSummary) {
+      const current = overtimeMap.get(row.employee_id) || {
+        nocturnaWeightedHours: 0,
+        extraWeightedHours: 0,
+        feriadoWeightedHours: 0,
+      };
+      const weighted = Number(row.weighted_hours);
+      if (row.kind === 'nocturna') current.nocturnaWeightedHours += weighted;
+      if (row.kind === 'extra') current.extraWeightedHours += weighted;
+      if (row.kind === 'feriado') current.feriadoWeightedHours += weighted;
+      overtimeMap.set(row.employee_id, current);
+    }
 
     for (const emp of employees) {
-      const empHours = hoursMap.get(emp.employee_id) || [];
-      const empEarn = historicalEarningsMap.get(emp.employee_id) || 0;
-      const empYearly = yearlyMap.get(emp.employee_id) || 0;
+      const empOvertime = overtimeMap.get(emp.employee_id) || {
+        nocturnaWeightedHours: 0,
+        extraWeightedHours: 0,
+        feriadoWeightedHours: 0,
+      };
       const empSuspentions = suspentionMap.get(emp.employee_id) || {
         suspention_start: '',
         suspention_end: '',
@@ -127,12 +133,10 @@ export class PayrollService {
         incomes,
         deductions,
         paysheetId,
-        empHours,
-        empEarn,
-        empYearly,
-        holidays,
+        empOvertime,
         incapacities,
         susDiscount,
+        paymentMethodId,
       );
     }
 
@@ -162,17 +166,18 @@ export class PayrollService {
     incomeConcepts: PayrollConceptRow[],
     deductionConcepts: PayrollConceptRow[],
     paysheetId: string,
-    hours: { total: number; work_date: string }[],
-    earning50week: number,
-    yearlySalary: number,
-    dates: string[],
+    overtime: OvertimeTotals,
     incapacities: Incapacities[],
-    discount: number | 0,
+    discount: number,
+    paymentMethodId: number,
   ) {
     const incapacityInfo = incapacities.find(
       (i) => i.employee_id === emp.employee_id,
     );
-    const time = this.getOvertimeHolidays(hours, dates, emp.turn_type);
+
+    // Horas de jornada segun Art. 173 (fuente unica: JOURNEY_LIMITS), no
+    // el campo legado contract.turn_type.
+    const journeyHours = JOURNEY_LIMITS[emp.journey_type]?.maxDaily ?? 8;
 
     const salaryWithDiscount = new Decimal(emp.base_salary).minus(
       new Decimal(discount),
@@ -182,11 +187,10 @@ export class PayrollService {
       salaryWithDiscount.toString(),
       incomeConcepts,
       {
-        standardHours: time.ordinaryHours,
-        holidaysHours: time.holidaysHours,
-        totalEarnings: earning50week,
-        yearlySalary,
-        turnType: emp.turn_type,
+        journeyHours,
+        nocturnaWeightedHours: overtime.nocturnaWeightedHours,
+        extraWeightedHours: overtime.extraWeightedHours,
+        feriadoWeightedHours: overtime.feriadoWeightedHours,
         incapacityDays: incapacityInfo ? incapacityInfo.days_paying : 0,
         incapacityPercentage: incapacityInfo
           ? incapacityInfo.percentage_to_pay
@@ -226,7 +230,7 @@ export class PayrollService {
         paysheetId,
         emp.employee_id,
         emp.contract_id,
-        1, // payment_method_id hardcoded for now
+        paymentMethodId,
         allTotals.grossSalary,
         allTotals.earnings,
         allTotals.deductions,
@@ -255,9 +259,9 @@ export class PayrollService {
     }
   }
 
-  async createPaysheetHeader(data: CreatePaysheetDto) {
+  async createPaysheetHeader(tenantId: string, data: CreatePaysheetDto) {
     const newPaysheet = await this.db.query(payroll.insertPaysheet, [
-      data.tenantId,
+      tenantId,
       data.branchId,
       data.periodStart,
       data.periodEnd,
@@ -313,48 +317,6 @@ export class PayrollService {
     }
 
     return totals;
-  }
-
-  getOvertimeHolidays(
-    clockingDates: { total: number; work_date: string }[],
-    holidays: string[],
-    turn: number,
-  ) {
-    let holidaysHours = new Decimal(0);
-    let ordinaryHours = new Decimal(0);
-
-    if (holidays.length === 0) {
-      return {
-        holidaysHours,
-        ordinaryHours: new Decimal(
-          clockingDates.reduce((acc, d) => acc + d.total, 0),
-        ),
-      };
-    }
-
-    clockingDates.forEach((date) => {
-      const formattedDate = new Date(date.work_date)
-        .toISOString()
-        .split('T')[0];
-
-      const isHoliday = holidays.some((h) => h === formattedDate);
-
-      const extraHours = Decimal.max(
-        0,
-        new Decimal(date.total).minus(new Decimal(turn)),
-      );
-
-      if (isHoliday) {
-        holidaysHours = holidaysHours.plus(extraHours);
-      } else {
-        ordinaryHours = ordinaryHours.plus(extraHours);
-      }
-    });
-
-    return {
-      holidaysHours,
-      ordinaryHours,
-    };
   }
 
   calculateSuspentionDiscount(
