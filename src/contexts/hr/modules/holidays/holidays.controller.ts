@@ -28,8 +28,13 @@ export class HolidaysController {
     @Query('recurring') recurring: string,
     @Session() user: IUserSession,
   ) {
-    const recurringFilter = recurring === undefined ? undefined : recurring === 'true';
-    return this.service.listByYear(user.tenant_id, Number(year), recurringFilter);
+    const recurringFilter =
+      recurring === undefined ? undefined : recurring === 'true';
+    return this.service.listByYear(
+      user.tenant_id,
+      Number(year),
+      recurringFilter,
+    );
   }
 
   @Post()

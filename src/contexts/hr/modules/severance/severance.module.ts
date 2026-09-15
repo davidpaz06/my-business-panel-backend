@@ -16,6 +16,11 @@ import { SalaryModule } from '../salary/salary.module';
     SeveranceAdvanceService,
   ],
   controllers: [SeveranceController],
-  exports: [SeveranceService, SeveranceDepositService, SeveranceInterestService, SeveranceAdvanceService],
+  exports: [
+    SeveranceService,
+    SeveranceDepositService,
+    SeveranceInterestService,
+    SeveranceAdvanceService,
+  ],
 })
 export class SeveranceModule {}

@@ -1,10 +1,19 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { hrQueries } from '@hr/hr.queries';
 import { SalaryHistoryService } from '../salary/salary-history.service';
-import { CreateDeductionDto, UpdateDeductionDto, ApplyDeductionPaymentDto } from './dto/deduction.dto';
+import {
+  CreateDeductionDto,
+  UpdateDeductionDto,
+  ApplyDeductionPaymentDto,
+} from './dto/deduction.dto';
 
 const { employeeDeduction, settlement } = hrQueries;
 
@@ -22,7 +31,10 @@ export class DeductionsService {
 
   async create(tenantId: string, dto: CreateDeductionDto) {
     // Arts. 412/413: la cuota sindical exige autorizacion expresa.
-    if (dto.kind === 'sindical' && !(dto.authorized && dto.authorization_date)) {
+    if (
+      dto.kind === 'sindical' &&
+      !(dto.authorized && dto.authorization_date)
+    ) {
       throw new BadRequestException(
         'La cuota sindical requiere autorizacion expresa del trabajador (Arts. 412, 413).',
       );
@@ -30,7 +42,11 @@ export class DeductionsService {
 
     // Art. 154: tope de 1/3 del periodo, salvo pension alimentaria (Art. 152).
     if (dto.kind !== 'alimentaria' && dto.installment_amount) {
-      const margin = await this.availableMargin(tenantId, dto.employee_id, dto.start_date);
+      const margin = await this.availableMargin(
+        tenantId,
+        dto.employee_id,
+        dto.start_date,
+      );
       const newTotal = margin.currentlyApplied + dto.installment_amount;
 
       if (newTotal > margin.maxDeduction) {
@@ -100,7 +116,11 @@ export class DeductionsService {
     return result.rows[0];
   }
 
-  async applyPayment(tenantId: string, deductionId: string, dto: ApplyDeductionPaymentDto) {
+  async applyPayment(
+    tenantId: string,
+    deductionId: string,
+    dto: ApplyDeductionPaymentDto,
+  ) {
     const deduction = await this.assertOwnership(deductionId, tenantId);
 
     if (dto.amount > Number(deduction.outstanding_balance)) {
@@ -121,9 +141,18 @@ export class DeductionsService {
    * credito a favor del trabajador. Solo aplica a deudas del
    * trabajador con el patrono (kind = 'deuda_patrono').
    */
-  async settlementCompensation(tenantId: string, employeeId: string, settlementId: string) {
-    const settlementRow = await this.db.query(settlement.getById, [settlementId]);
-    if (!settlementRow.rows.length || settlementRow.rows[0].tenant_id !== tenantId) {
+  async settlementCompensation(
+    tenantId: string,
+    employeeId: string,
+    settlementId: string,
+  ) {
+    const settlementRow = await this.db.query(settlement.getById, [
+      settlementId,
+    ]);
+    if (
+      !settlementRow.rows.length ||
+      settlementRow.rows[0].tenant_id !== tenantId
+    ) {
       throw new NotFoundException(`Liquidacion ${settlementId} no encontrada.`);
     }
 
@@ -137,7 +166,10 @@ export class DeductionsService {
     );
     const outstanding = outstandingRows.rows
       .filter((r) => r.kind === 'deuda_patrono')
-      .reduce((acc, r) => acc.add(new Decimal(r.outstanding_balance)), new Decimal(0));
+      .reduce(
+        (acc, r) => acc.add(new Decimal(r.outstanding_balance)),
+        new Decimal(0),
+      );
 
     const maxCompensation = creditInFavor.mul(SETTLEMENT_COMPENSATION_FRACTION);
     const compensated = Decimal.min(outstanding, maxCompensation);
@@ -154,7 +186,9 @@ export class DeductionsService {
   }
 
   private async assertOwnership(deductionId: string, tenantId: string) {
-    const result = await this.db.query(employeeDeduction.getById, [deductionId]);
+    const result = await this.db.query(employeeDeduction.getById, [
+      deductionId,
+    ]);
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
       throw new NotFoundException(`Deduccion ${deductionId} no encontrada.`);
     }

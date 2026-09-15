@@ -8,7 +8,13 @@ import { MoraModule } from '../mora/mora.module';
 import { SalaryModule } from '../salary/salary.module';
 
 @Module({
-  imports: [SeveranceModule, VacationsModule, ProfitSharingModule, MoraModule, SalaryModule],
+  imports: [
+    SeveranceModule,
+    VacationsModule,
+    ProfitSharingModule,
+    MoraModule,
+    SalaryModule,
+  ],
   providers: [SettlementService],
   controllers: [SettlementController],
   exports: [SettlementService],

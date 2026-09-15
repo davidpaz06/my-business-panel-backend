@@ -1,11 +1,19 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { hrQueries } from '@hr/hr.queries';
 import { SalaryHistoryService } from '../salary/salary-history.service';
 import { EnjoyVacationDto, PayBonusDto } from './dto/vacation.dto';
-import { vacationDays, bonusVacationDays } from './interfaces/vacation-calculation';
+import {
+  vacationDays,
+  bonusVacationDays,
+} from './interfaces/vacation-calculation';
 import { daysBetween } from '../severance/interfaces/severance-calculation';
 
 const { vacationPeriod, employee } = hrQueries;
@@ -82,12 +90,14 @@ export class VacationPeriodService {
    */
   async enjoy(tenantId: string, periodId: string, dto: EnjoyVacationDto) {
     const period = await this.getPeriod(periodId, tenantId);
-    const daysRequested = daysBetween(
-      new Date(`${dto.enjoyed_from}T00:00:00Z`),
-      new Date(`${dto.enjoyed_to}T00:00:00Z`),
-    ) + 1;
+    const daysRequested =
+      daysBetween(
+        new Date(`${dto.enjoyed_from}T00:00:00Z`),
+        new Date(`${dto.enjoyed_to}T00:00:00Z`),
+      ) + 1;
 
-    const availableDays = Number(period.days_earned) - Number(period.days_taken);
+    const availableDays =
+      Number(period.days_earned) - Number(period.days_taken);
     if (daysRequested > availableDays) {
       throw new BadRequestException(
         `El periodo tiene ${availableDays} dias disponibles; se solicitaron ${daysRequested}.`,
@@ -95,7 +105,10 @@ export class VacationPeriodService {
     }
 
     const priorMonthEnd = this.lastDayOfPriorMonth(dto.enjoyed_from);
-    const salary = await this.salaryHistory.resolve(period.employee_id, priorMonthEnd);
+    const salary = await this.salaryHistory.resolve(
+      period.employee_id,
+      priorMonthEnd,
+    );
     // Redondear solo al PERSISTIR el monto final: multiplicar por
     // dias_earned con precision completa antes de fijar 4 decimales,
     // no reencadenar el redondeo del salario diario ya guardado.
@@ -145,7 +158,10 @@ export class VacationPeriodService {
     const referenceDate = period.enjoyed_from
       ? this.lastDayOfPriorMonth(period.enjoyed_from)
       : period.period_end;
-    const salary = await this.salaryHistory.resolve(period.employee_id, referenceDate);
+    const salary = await this.salaryHistory.resolve(
+      period.employee_id,
+      referenceDate,
+    );
     const amount = salary.div(30).mul(period.bonus_days_earned);
 
     return {
@@ -158,7 +174,10 @@ export class VacationPeriodService {
 
   async payBonus(tenantId: string, periodId: string, _dto: PayBonusDto) {
     const { amount } = await this.bonusAmount(tenantId, periodId);
-    const result = await this.db.query(vacationPeriod.payBonus, [amount, periodId]);
+    const result = await this.db.query(vacationPeriod.payBonus, [
+      amount,
+      periodId,
+    ]);
     return result.rows[0];
   }
 
@@ -167,10 +186,20 @@ export class VacationPeriodService {
    * pagan al salario normal DE LA TERMINACION, no al historico de
    * cada periodo causado.
    */
-  async pendingValue(tenantId: string, employeeId: string, endDate: string, explain = false) {
+  async pendingValue(
+    tenantId: string,
+    employeeId: string,
+    endDate: string,
+    explain = false,
+  ) {
     await this.getHireDate(employeeId, tenantId);
-    const pending = await this.db.query(vacationPeriod.listPending, [employeeId]);
-    const terminationSalary = await this.salaryHistory.resolve(employeeId, endDate);
+    const pending = await this.db.query(vacationPeriod.listPending, [
+      employeeId,
+    ]);
+    const terminationSalary = await this.salaryHistory.resolve(
+      employeeId,
+      endDate,
+    );
     const dailySalary = terminationSalary.div(30);
 
     let totalDays = new Decimal(0);
@@ -208,12 +237,17 @@ export class VacationPeriodService {
   private async getPeriod(periodId: string, tenantId: string) {
     const result = await this.db.query(vacationPeriod.getById, [periodId]);
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
-      throw new NotFoundException(`Periodo vacacional ${periodId} no encontrado.`);
+      throw new NotFoundException(
+        `Periodo vacacional ${periodId} no encontrado.`,
+      );
     }
     return result.rows[0];
   }
 
-  private async getHireDate(employeeId: string, tenantId: string): Promise<string> {
+  private async getHireDate(
+    employeeId: string,
+    tenantId: string,
+  ): Promise<string> {
     const result = await this.db.query(employee.getForSalary, [employeeId]);
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
       throw new NotFoundException(`Empleado ${employeeId} no encontrado.`);

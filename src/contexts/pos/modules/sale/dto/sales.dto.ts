@@ -52,10 +52,6 @@ export class NewSingleSaleDto {
 
   @IsBoolean()
   is_completed!: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  has_electronic_invoice?: boolean;
 }
 
 export class FullSaleDto {
@@ -106,10 +102,6 @@ export class FullSaleDto {
   @IsNotEmpty()
   @IsArray()
   items!: Item[];
-
-  @IsOptional()
-  @IsBoolean()
-  has_electronic_invoice?: boolean;
 
   @IsOptional()
   @IsUUID()

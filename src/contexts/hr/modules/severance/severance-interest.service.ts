@@ -46,7 +46,11 @@ export class SeveranceInterestService {
     date: string,
   ): Promise<InterestRateInfo> {
     if (!depositMade) {
-      const rate = await this.parameters.resolve(tenantId, 'tasa_activa_bcv', date);
+      const rate = await this.parameters.resolve(
+        tenantId,
+        'tasa_activa_bcv',
+        date,
+      );
       return { rateKind: 'activa_bcv', rate, penalty: true, article: '143' };
     }
 
@@ -71,7 +75,10 @@ export class SeveranceInterestService {
   }
 
   async generate(tenantId: string, dto: GenerateInterestDto) {
-    const depositRows = await this.deposits.listByEmployee(tenantId, dto.employee_id);
+    const depositRows = await this.deposits.listByEmployee(
+      tenantId,
+      dto.employee_id,
+    );
     const created: unknown[] = [];
 
     for (const deposit of depositRows) {

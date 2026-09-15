@@ -1,8 +1,8 @@
-// src/docs/contexts/pos/d-invoice/delete-d-invoice.doc.ts
-export const deleteDInvoiceDoc = {
+// src/docs/contexts/pos/invoice/delete-invoice.doc.ts
+export const deleteInvoiceDoc = {
   operation: {
-    summary: 'Delete d-invoice',
-    description: 'Deletes a digital invoice by its ID.',
+    summary: 'Delete invoice',
+    description: 'Deletes an invoice by its ID.',
   },
 
   responses: {

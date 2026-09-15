@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SeveranceService } from './severance.service';
 import { SeveranceDepositService } from './severance-deposit.service';
@@ -63,7 +72,10 @@ export class SeveranceController {
   // ---- Depositos (Art. 142.a, 143) ----
 
   @Post('deposits/generate')
-  generateDeposits(@Body() body: GenerateDepositsDto, @Session() user: IUserSession) {
+  generateDeposits(
+    @Body() body: GenerateDepositsDto,
+    @Session() user: IUserSession,
+  ) {
     return this.depositService.generate(user.tenant_id, body);
   }
 
@@ -76,7 +88,10 @@ export class SeveranceController {
   }
 
   @Get('deposits/:employeeId')
-  listDeposits(@Param('employeeId') employeeId: string, @Session() user: IUserSession) {
+  listDeposits(
+    @Param('employeeId') employeeId: string,
+    @Session() user: IUserSession,
+  ) {
     return this.depositService.listByEmployee(user.tenant_id, employeeId);
   }
 
@@ -86,7 +101,11 @@ export class SeveranceController {
     @Body() body: UpdateDepositDto,
     @Session() user: IUserSession,
   ) {
-    return this.depositService.updateDepositMade(user.tenant_id, depositId, body);
+    return this.depositService.updateDepositMade(
+      user.tenant_id,
+      depositId,
+      body,
+    );
   }
 
   // ---- Intereses (Art. 143) ----
@@ -107,7 +126,10 @@ export class SeveranceController {
   }
 
   @Post('interest/generate')
-  generateInterest(@Body() body: GenerateInterestDto, @Session() user: IUserSession) {
+  generateInterest(
+    @Body() body: GenerateInterestDto,
+    @Session() user: IUserSession,
+  ) {
     return this.interestService.generate(user.tenant_id, body);
   }
 

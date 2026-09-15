@@ -1,4 +1,14 @@
-import { IsBoolean, IsDateString, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 export class CreateProfitPeriodDto {
   @IsInt()

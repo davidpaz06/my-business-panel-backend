@@ -2,7 +2,10 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import { hrQueries } from '@hr/hr.queries';
-import { vacationDays, bonusVacationDays } from './interfaces/vacation-calculation';
+import {
+  vacationDays,
+  bonusVacationDays,
+} from './interfaces/vacation-calculation';
 import { monthsBetween } from '../severance/interfaces/severance-calculation';
 import { VacationPeriodService } from './vacation-period.service';
 
@@ -18,7 +21,13 @@ export class VacationsService {
   /** Preview puro (Art. 190), sin empleado. */
   entitlement(years: number) {
     const days = vacationDays(years);
-    return { years, days, rightVested: years >= 1, capped: days === 30, article: '190' };
+    return {
+      years,
+      days,
+      rightVested: years >= 1,
+      capped: days === 30,
+      article: '190',
+    };
   }
 
   /** Preview puro (Art. 192), sin empleado. */
@@ -47,7 +56,9 @@ export class VacationsService {
     let effectiveYears = years;
     if (effectiveYears === undefined) {
       const hire = new Date(`${result.rows[0].hire_date}T00:00:00Z`);
-      const end = new Date(`${date ?? new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+      const end = new Date(
+        `${date ?? new Date().toISOString().slice(0, 10)}T00:00:00Z`,
+      );
       effectiveYears = monthsBetween(hire, end).completeYears;
     }
 
@@ -73,7 +84,7 @@ export class VacationsService {
       // se documenta el campo en 0 (no hay datos de origen para
       // calcularlo automaticamente).
       response.compensatoryDays = 0;
-      response.totalDays = (response.totalDays as number ?? days) + 0;
+      response.totalDays = ((response.totalDays as number) ?? days) + 0;
     }
 
     return response;
@@ -111,8 +122,15 @@ export class VacationsService {
   }
 
   /** Combina periodos causados + fraccion del anio en curso (Art. 196). */
-  async settlementPreview(tenantId: string, employeeId: string, endDate: string) {
-    const causedPeriods = await this.periods.listByEmployee(tenantId, employeeId);
+  async settlementPreview(
+    tenantId: string,
+    employeeId: string,
+    endDate: string,
+  ) {
+    const causedPeriods = await this.periods.listByEmployee(
+      tenantId,
+      employeeId,
+    );
     const result = await this.db.query(employee.getForSalary, [employeeId]);
 
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {

@@ -14,14 +14,20 @@ export class HolidaysService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
   async listByYear(tenantId: string, year: number, recurring?: boolean) {
-    const result = await this.db.query(holidayLottt.listByYear, [year, tenantId]);
+    const result = await this.db.query(holidayLottt.listByYear, [
+      year,
+      tenantId,
+    ]);
 
     if (recurring === undefined) return result.rows;
     return result.rows.filter((r) => r.is_recurring === recurring);
   }
 
   async checkDate(tenantId: string, date: string) {
-    const result = await this.db.query(holidayLottt.checkDate, [date, tenantId]);
+    const result = await this.db.query(holidayLottt.checkDate, [
+      date,
+      tenantId,
+    ]);
 
     if (result.rows.length) {
       const row = result.rows[0];
@@ -44,7 +50,10 @@ export class HolidaysService {
   }
 
   async declaredCount(tenantId: string, year: number) {
-    const result = await this.db.query(holidayLottt.countDeclared, [year, tenantId]);
+    const result = await this.db.query(holidayLottt.countDeclared, [
+      year,
+      tenantId,
+    ]);
     return {
       year,
       declaredCount: Number(result.rows[0].total),

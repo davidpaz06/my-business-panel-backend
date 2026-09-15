@@ -1,10 +1,18 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { hrQueries } from '@hr/hr.queries';
 import { SalaryHistoryService } from '../salary/salary-history.service';
-import { JOURNEY_LIMITS, JOURNEY_EXCEPTION_REGIMES } from './interfaces/journey-limits.interface';
+import {
+  JOURNEY_LIMITS,
+  JOURNEY_EXCEPTION_REGIMES,
+} from './interfaces/journey-limits.interface';
 import { classifyJourney } from './interfaces/journey-classification';
 
 const { contract: contractQueries, employee, overtimeRecord } = hrQueries;
@@ -75,12 +83,10 @@ export class JourneyService {
     explain = false,
   ) {
     const emp = await this.getEmployeeContext(employeeId, tenantId);
-    const records = await this.db.query(overtimeRecord.listByEmployeeRangeKind, [
-      employeeId,
-      'nocturna',
-      from,
-      to,
-    ]);
+    const records = await this.db.query(
+      overtimeRecord.listByEmployeeRangeKind,
+      [employeeId, 'nocturna', from, to],
+    );
 
     let totalAmount = new Decimal(0);
     let totalHours = new Decimal(0);
@@ -88,7 +94,10 @@ export class JourneyService {
     let lastRateFactor = new Decimal(0);
 
     for (const record of records.rows) {
-      const monthly = await this.salaryHistory.resolve(employeeId, record.work_date);
+      const monthly = await this.salaryHistory.resolve(
+        employeeId,
+        record.work_date,
+      );
       const dailyHours = JOURNEY_LIMITS[emp.journeyType]?.maxDaily ?? 8;
       const baseHourly = monthly.div(30).div(dailyHours);
       const rateFactor = new Decimal(record.rate_factor);
@@ -116,18 +125,26 @@ export class JourneyService {
 
     if (!explain) return base;
 
-    return { ...base, baseDaily: lastBaseHourly.mul(JOURNEY_LIMITS[emp.journeyType]?.maxDaily ?? 8).toFixed(4) };
+    return {
+      ...base,
+      baseDaily: lastBaseHourly
+        .mul(JOURNEY_LIMITS[emp.journeyType]?.maxDaily ?? 8)
+        .toFixed(4),
+    };
   }
 
   /** Horas extra pagadas del periodo (Art. 118), desglosadas por autorizacion. */
-  async getOvertimePay(tenantId: string, employeeId: string, from: string, to: string) {
+  async getOvertimePay(
+    tenantId: string,
+    employeeId: string,
+    from: string,
+    to: string,
+  ) {
     const emp = await this.getEmployeeContext(employeeId, tenantId);
-    const records = await this.db.query(overtimeRecord.listByEmployeeRangeKind, [
-      employeeId,
-      'extra',
-      from,
-      to,
-    ]);
+    const records = await this.db.query(
+      overtimeRecord.listByEmployeeRangeKind,
+      [employeeId, 'extra', from, to],
+    );
 
     let authorizedAmount = new Decimal(0);
     let authorizedHours = new Decimal(0);
@@ -135,7 +152,10 @@ export class JourneyService {
     let unauthorizedHours = new Decimal(0);
 
     for (const record of records.rows) {
-      const monthly = await this.salaryHistory.resolve(employeeId, record.work_date);
+      const monthly = await this.salaryHistory.resolve(
+        employeeId,
+        record.work_date,
+      );
       const dailyHours = JOURNEY_LIMITS[emp.journeyType]?.maxDaily ?? 8;
       const baseHourly = monthly.div(30).div(dailyHours);
       const amount = baseHourly.mul(record.rate_factor).mul(record.hours);
@@ -153,8 +173,16 @@ export class JourneyService {
       employeeId,
       from,
       to,
-      authorized: { hours: authorizedHours.toNumber(), amount: authorizedAmount.toFixed(4), rateFactor: 1.5 },
-      unauthorized: { hours: unauthorizedHours.toNumber(), amount: unauthorizedAmount.toFixed(4), rateFactor: 2.0 },
+      authorized: {
+        hours: authorizedHours.toNumber(),
+        amount: authorizedAmount.toFixed(4),
+        rateFactor: 1.5,
+      },
+      unauthorized: {
+        hours: unauthorizedHours.toNumber(),
+        amount: unauthorizedAmount.toFixed(4),
+        rateFactor: 2.0,
+      },
       total: authorizedAmount.add(unauthorizedAmount).toFixed(4),
       article: '118',
     };
@@ -176,7 +204,9 @@ export class JourneyService {
     let workAmount = new Decimal(0);
     const hourly = dailySalary.div(dailyHours);
     for (const record of records.rows) {
-      workAmount = workAmount.add(hourly.mul(record.rate_factor).mul(record.hours));
+      workAmount = workAmount.add(
+        hourly.mul(record.rate_factor).mul(record.hours),
+      );
     }
 
     return {

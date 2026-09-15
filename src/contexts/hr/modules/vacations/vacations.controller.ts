@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { VacationsService } from './vacations.service';
 import { VacationPeriodService } from './vacation-period.service';
@@ -80,7 +88,10 @@ export class VacationsController {
   }
 
   @Get('periods/:employeeId')
-  listPeriods(@Param('employeeId') employeeId: string, @Session() user: IUserSession) {
+  listPeriods(
+    @Param('employeeId') employeeId: string,
+    @Session() user: IUserSession,
+  ) {
     return this.periods.listByEmployee(user.tenant_id, employeeId);
   }
 
@@ -103,7 +114,10 @@ export class VacationsController {
   }
 
   @Get('periods/:periodId/bonus-amount')
-  bonusAmount(@Param('periodId') periodId: string, @Session() user: IUserSession) {
+  bonusAmount(
+    @Param('periodId') periodId: string,
+    @Session() user: IUserSession,
+  ) {
     return this.periods.bonusAmount(user.tenant_id, periodId);
   }
 

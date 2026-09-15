@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { OvertimeService } from './overtime.service';
 import { CreateOvertimeDto, ValidateOvertimeDto } from './dto/overtime.dto';
@@ -50,6 +58,12 @@ export class OvertimeController {
     @Query('kind') kind: string,
     @Session() user: IUserSession,
   ) {
-    return this.service.listByEmployee(user.tenant_id, employeeId, from, to, kind);
+    return this.service.listByEmployee(
+      user.tenant_id,
+      employeeId,
+      from,
+      to,
+      kind,
+    );
   }
 }

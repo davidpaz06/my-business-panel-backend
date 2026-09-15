@@ -27,7 +27,11 @@ export class SalaryService {
    * solo al presentar/persistir el monto FINAL, nunca este
    * intermedio, o el redondeo se compone (ver vacation-period.service.ts).
    */
-  async getNormalDaily(employeeId: string, tenantId: string, date: string): Promise<Decimal> {
+  async getNormalDaily(
+    employeeId: string,
+    tenantId: string,
+    date: string,
+  ): Promise<Decimal> {
     const monthlySalary = await this.salaryHistory.resolve(employeeId, date);
     return monthlySalary.div(30);
   }
@@ -65,14 +69,22 @@ export class SalaryService {
    * redondear a 4 decimales. Para consumo de OTROS servicios
    * (severance) que multiplican este valor por dias.
    */
-  async getIntegralDaily(employeeId: string, tenantId: string, date: string): Promise<Decimal> {
+  async getIntegralDaily(
+    employeeId: string,
+    tenantId: string,
+    date: string,
+  ): Promise<Decimal> {
     const monthlySalary = await this.salaryHistory.resolve(employeeId, date);
     const [diasUtilidades, completeYears] = await Promise.all([
       this.parameters.resolve(tenantId, 'dias_utilidades', date),
       this.getCompleteYears(employeeId, tenantId, date),
     ]);
     const diasBonoVacacional = new Decimal(bonusVacationDays(completeYears));
-    const salary = new Salary(monthlySalary, diasUtilidades, diasBonoVacacional);
+    const salary = new Salary(
+      monthlySalary,
+      diasUtilidades,
+      diasBonoVacacional,
+    );
     return salary.integralDaily();
   }
 
@@ -101,7 +113,11 @@ export class SalaryService {
     ]);
     const diasBonoVacacional = new Decimal(bonusVacationDays(completeYears));
 
-    const salary = new Salary(monthlySalary, diasUtilidades, diasBonoVacacional);
+    const salary = new Salary(
+      monthlySalary,
+      diasUtilidades,
+      diasBonoVacacional,
+    );
 
     const base = {
       employeeId,
@@ -140,7 +156,10 @@ export class SalaryService {
     tenantId: string,
     date: string,
   ): Promise<number> {
-    const { hire_date: hireDate } = await this.getEmployeeContext(employeeId, tenantId);
+    const { hire_date: hireDate } = await this.getEmployeeContext(
+      employeeId,
+      tenantId,
+    );
     return monthsBetween(
       new Date(`${hireDate}T00:00:00Z`),
       new Date(`${date}T00:00:00Z`),

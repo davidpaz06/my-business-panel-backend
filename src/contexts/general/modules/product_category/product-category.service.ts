@@ -28,18 +28,6 @@ export class ProductCategoryService {
     return categories.rows;
   }
 
-  async getAllCategoriesByCabysCode(
-    cabysCode: string | null,
-    limit: number,
-    offset: number,
-  ) {
-    const categories = await this.db.query(
-      productCategory.allPaginatedByCabysCode,
-      [cabysCode || null, limit, offset],
-    );
-    return categories.rows;
-  }
-
   async getCategoryById(id: string) {
     const category = await this.db.query(productCategory.byId, [id]);
     return category.rows[0];

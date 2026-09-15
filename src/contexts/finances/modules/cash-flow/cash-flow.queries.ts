@@ -112,12 +112,10 @@ const movementsUnion = `
     'salida'::text                        AS direction,
     'devoluciones'::text                  AS movement_type
   FROM pos_schema.return_transaction rt
-  LEFT JOIN pos_schema.digital_sale_invoice dsi
-    ON dsi.digital_sale_invoice_id = rt.digital_sale_invoice_id
-  LEFT JOIN pos_schema.electronic_sale_invoice esi
-    ON esi.electronic_sale_invoice_id = rt.electronic_sale_invoice_id
+  JOIN pos_schema.invoice inv
+    ON inv.invoice_id = rt.invoice_id
   JOIN pos_schema.sale s
-    ON s.sale_id = COALESCE(dsi.sale_id, esi.sale_id)
+    ON s.sale_id = inv.sale_id
   JOIN general_schema.branch b ON b.branch_id = s.branch_id
   WHERE b.tenant_id = $1
     AND rt.return_date BETWEEN $2::timestamp AND $3::timestamp

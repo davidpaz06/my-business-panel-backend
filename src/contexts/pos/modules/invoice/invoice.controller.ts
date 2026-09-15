@@ -1,57 +1,57 @@
 import { Controller, Delete, Get, Param, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { DInvoiceService } from './d-invoice.service';
+import { InvoiceService } from './invoice.service';
 import {
-  getTenantDInvoicesDoc,
-  getDInvoiceByIdDoc,
-  getCustomerDInvoicesDoc,
-  deleteDInvoiceDoc,
-} from '@/docs/contexts/pos/d-invoice';
+  getTenantInvoicesDoc,
+  getInvoiceByIdDoc,
+  getCustomerInvoicesDoc,
+  deleteInvoiceDoc,
+} from '@/docs/contexts/pos/invoice';
 
-@ApiTags('D-Invoice')
-@Controller('d-invoice')
-export class DInvoiceController {
-  constructor(private readonly invoiceService: DInvoiceService) {}
+@ApiTags('Invoice')
+@Controller('invoice')
+export class InvoiceController {
+  constructor(private readonly invoiceService: InvoiceService) {}
 
-  @ApiOperation(getTenantDInvoicesDoc.operation)
-  @ApiResponse(getTenantDInvoicesDoc.responses[200])
-  @ApiResponse(getTenantDInvoicesDoc.responses[401])
+  @ApiOperation(getTenantInvoicesDoc.operation)
+  @ApiResponse(getTenantInvoicesDoc.responses[200])
+  @ApiResponse(getTenantInvoicesDoc.responses[401])
   @Get(':id')
-  async getTenantDInvoices(@Param('id') id: string) {
-    return this.invoiceService.getTenantDInvoices(id);
+  async getTenantInvoices(@Param('id') id: string) {
+    return this.invoiceService.getTenantInvoices(id);
   }
 
-  @ApiOperation(getDInvoiceByIdDoc.operation)
-  @ApiResponse(getDInvoiceByIdDoc.responses[200])
-  @ApiResponse(getDInvoiceByIdDoc.responses[401])
-  @ApiResponse(getDInvoiceByIdDoc.responses[404])
+  @ApiOperation(getInvoiceByIdDoc.operation)
+  @ApiResponse(getInvoiceByIdDoc.responses[200])
+  @ApiResponse(getInvoiceByIdDoc.responses[401])
+  @ApiResponse(getInvoiceByIdDoc.responses[404])
   @Get('details/:id')
-  async getDInvoiceById(@Param('id') id: string) {
-    return this.invoiceService.getDInvoiceById(id);
+  async getInvoiceById(@Param('id') id: string) {
+    return this.invoiceService.getInvoiceById(id);
   }
 
-  @ApiOperation(getCustomerDInvoicesDoc.operation)
-  @ApiResponse(getCustomerDInvoicesDoc.responses[200])
-  @ApiResponse(getCustomerDInvoicesDoc.responses[401])
+  @ApiOperation(getCustomerInvoicesDoc.operation)
+  @ApiResponse(getCustomerInvoicesDoc.responses[200])
+  @ApiResponse(getCustomerInvoicesDoc.responses[401])
   @Get('sale/:saleId')
-  async getDInvoiceBySaleId(@Param('saleId') saleId: string) {
-    return this.invoiceService.getDInvoiceBySaleId(saleId);
+  async getInvoiceBySaleId(@Param('saleId') saleId: string) {
+    return this.invoiceService.getInvoiceBySaleId(saleId);
   }
 
   @Get()
-  async getCustomerDInvoices(
+  async getCustomerInvoices(
     @Query('id') tenantId: string,
     @Query('doc') doc: string,
   ) {
-    return this.invoiceService.getCustomerDInvoices(tenantId, doc);
+    return this.invoiceService.getCustomerInvoices(tenantId, doc);
   }
 
-  @ApiOperation(deleteDInvoiceDoc.operation)
-  @ApiResponse(deleteDInvoiceDoc.responses[200])
-  @ApiResponse(deleteDInvoiceDoc.responses[401])
-  @ApiResponse(deleteDInvoiceDoc.responses[404])
+  @ApiOperation(deleteInvoiceDoc.operation)
+  @ApiResponse(deleteInvoiceDoc.responses[200])
+  @ApiResponse(deleteInvoiceDoc.responses[401])
+  @ApiResponse(deleteInvoiceDoc.responses[404])
   @Delete(':id')
-  async deleteDInvoice(@Param('id') id: string) {
-    return this.invoiceService.deleteDInvoice(id);
+  async deleteInvoice(@Param('id') id: string) {
+    return this.invoiceService.deleteInvoice(id);
   }
 }

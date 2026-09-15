@@ -140,6 +140,8 @@ export class CollectionAlertsService {
   }
 
   private isSuperuser(roleId: number) {
-    return this.stateService.getRole(roleId).role_hierarchy === SUPERUSER_HIERARCHY;
+    return (
+      this.stateService.getRole(roleId).role_hierarchy === SUPERUSER_HIERARCHY
+    );
   }
 }

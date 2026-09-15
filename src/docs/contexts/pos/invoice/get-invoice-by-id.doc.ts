@@ -1,14 +1,14 @@
-// src/docs/contexts/pos/d-invoice/get-d-invoice-by-id.doc.ts
-export const getDInvoiceByIdDoc = {
+// src/docs/contexts/pos/invoice/get-invoice-by-id.doc.ts
+export const getInvoiceByIdDoc = {
   operation: {
-    summary: 'Get d-invoice details',
-    description: 'Returns the full detail of a digital invoice by its ID.',
+    summary: 'Get invoice details',
+    description: 'Returns the full detail of an invoice by its ID.',
   },
 
   responses: {
     200: {
       status: 200,
-      description: 'Digital invoice found.',
+      description: 'Invoice found.',
       schema: {
         type: 'object',
         properties: {

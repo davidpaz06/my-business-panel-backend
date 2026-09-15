@@ -14,7 +14,6 @@ import { SaleService } from './sale.service';
 import { FullSaleDto } from './dto/sales.dto';
 import { DATABASE } from '../../../general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
-import { EInvoiceService } from '../e-invoice/e-invoice.service';
 import {
   Paginate,
   PaginatedResult,
@@ -23,10 +22,6 @@ import {
   getSaleConditionsDoc,
   createFullSaleDoc,
   getAllSalesByBranchDoc,
-  getEInvoicesByBranchDoc,
-  getEInvoiceByIdDoc,
-  getEInvoiceForSaleDoc,
-  createEInvoiceForSaleDoc,
 } from '@/docs/contexts/pos/sale';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 
@@ -37,7 +32,6 @@ export class SaleController {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly saleService: SaleService,
-    private readonly eInvoiceService: EInvoiceService,
   ) {}
 
   @ApiOperation(getSaleConditionsDoc.operation)
@@ -75,11 +69,10 @@ export class SaleController {
   @ApiResponse(getAllSalesByBranchDoc.responses[401])
   @Get(':branch_id')
   @Paginate({
-    table: `(SELECT s.sale_id, s.sale_date, s.total_amount, s.subtotal_amount, s.tax_amount, s.is_completed, s.has_electronic_invoice, s.is_refunded, s.tenant_customer_id, s.created_at, b.branch_id, b.branch_name, c.currency_code, c.symbol,
+    table: `(SELECT s.sale_id, s.sale_date, s.total_amount, s.subtotal_amount, s.tax_amount, s.is_completed, s.is_refunded, s.tenant_customer_id, s.created_at, b.branch_id, b.branch_name, c.currency_code, c.symbol,
         (SELECT rt.return_transaction_id FROM pos_schema.return_transaction rt
-          LEFT JOIN pos_schema.digital_sale_invoice dsi ON dsi.digital_sale_invoice_id = rt.digital_sale_invoice_id
-          LEFT JOIN pos_schema.electronic_sale_invoice esi ON esi.electronic_sale_invoice_id = rt.electronic_sale_invoice_id
-          WHERE dsi.sale_id = s.sale_id OR esi.sale_id = s.sale_id LIMIT 1) AS return_transaction_id
+          INNER JOIN pos_schema.invoice inv ON inv.invoice_id = rt.invoice_id
+          WHERE inv.sale_id = s.sale_id LIMIT 1) AS return_transaction_id
         FROM pos_schema.sale s INNER JOIN general_schema.branch b USING(branch_id) INNER JOIN general_schema.currency c USING(currency_id)) AS paginated_sales`,
     columns: [
       'sale_id',
@@ -88,7 +81,6 @@ export class SaleController {
       'subtotal_amount',
       'tax_amount',
       'is_completed',
-      'has_electronic_invoice',
       'is_refunded',
       'branch_id',
       'branch_name',
@@ -106,51 +98,5 @@ export class SaleController {
     @PaginatedResult() result: any,
   ) {
     return result;
-  }
-
-  // E-invoice routes — serviced by EInvoiceModule
-
-  @ApiOperation(getEInvoicesByBranchDoc.operation)
-  @ApiResponse(getEInvoicesByBranchDoc.responses[200])
-  @ApiResponse(getEInvoicesByBranchDoc.responses[401])
-  @Get('e-invoice/branch/:branch_id')
-  async getEInvoicesByBranch(
-    @Param('branch_id') branchId: string,
-    @Req() req: any,
-  ) {
-    return this.eInvoiceService.getEInvoiceByBranch(
-      branchId,
-      req.user.tenant_id,
-    );
-  }
-
-  @ApiOperation(getEInvoiceByIdDoc.operation)
-  @ApiResponse(getEInvoiceByIdDoc.responses[200])
-  @ApiResponse(getEInvoiceByIdDoc.responses[401])
-  @ApiResponse(getEInvoiceByIdDoc.responses[404])
-  @Get('e-invoice/:invoice_id')
-  async getEInvoiceById(
-    @Param('invoice_id') invoiceId: string,
-    @Req() req: any,
-  ) {
-    return this.eInvoiceService.getEInvoiceById(invoiceId, req.user.tenant_id);
-  }
-
-  @ApiOperation(getEInvoiceForSaleDoc.operation)
-  @ApiResponse(getEInvoiceForSaleDoc.responses[200])
-  @ApiResponse(getEInvoiceForSaleDoc.responses[401])
-  @ApiResponse(getEInvoiceForSaleDoc.responses[404])
-  @Get(':sale_id/e-invoice')
-  async getEInvoiceForSale(@Param('sale_id') saleId: string, @Req() req: any) {
-    return this.eInvoiceService.getEInvoiceForSale(saleId, req.user.tenant_id);
-  }
-
-  @ApiOperation(createEInvoiceForSaleDoc.operation)
-  @ApiResponse(createEInvoiceForSaleDoc.responses[201])
-  @ApiResponse(createEInvoiceForSaleDoc.responses[400])
-  @ApiResponse(createEInvoiceForSaleDoc.responses[401])
-  @Post(':sale_id/e-invoice')
-  async createEInvoiceForSale(@Param('sale_id') saleId: string) {
-    return this.eInvoiceService.createEInvoiceForSale(saleId);
   }
 }

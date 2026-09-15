@@ -3,7 +3,6 @@ import { queries } from '@/queries';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { seedCabysIfNeeded } from './cabys.seeder';
 
 export const DATABASE = 'DATABASE';
 
@@ -205,7 +204,6 @@ export const dbProvider = {
     db = Database.getInstance(config, queries);
 
     await bootstrapIfNeeded(db);
-    await seedCabysIfNeeded(db);
 
     return db;
   },

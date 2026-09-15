@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
@@ -45,7 +51,11 @@ export class SettlementService {
   ) {}
 
   indemnityAppliesCheck(terminationType: string) {
-    return { terminationType, appliesIndemnity: indemnityApplies(terminationType), article: '92' };
+    return {
+      terminationType,
+      appliesIndemnity: indemnityApplies(terminationType),
+      article: '92',
+    };
   }
 
   /**
@@ -57,12 +67,20 @@ export class SettlementService {
     tenantId: string,
     employeeId: string,
     endDate: string,
-    opts: { breakdown?: boolean; onlyDeductions?: boolean; hireDateOverride?: string } = {},
+    opts: {
+      breakdown?: boolean;
+      onlyDeductions?: boolean;
+      hireDateOverride?: string;
+    } = {},
   ) {
     const emp = await this.getEmployee(employeeId, tenantId);
     const hireDate = opts.hireDateOverride ?? emp.hireDate;
 
-    const severanceResult = await this.severance.calculate(tenantId, employeeId, endDate);
+    const severanceResult = await this.severance.calculate(
+      tenantId,
+      employeeId,
+      endDate,
+    );
     const items: SettlementItemDraft[] = [];
     let sortOrder = 0;
 
@@ -74,9 +92,10 @@ export class SettlementService {
       conceptName: 'Prestaciones sociales',
       article: severanceResult.article,
       salaryBasis: isShortTenure ? 'normal' : 'integral',
-      baseAmount: (isShortTenure
-        ? severanceResult.normalDailySalary
-        : severanceResult.lastIntegralDailySalary) ?? '0.0000',
+      baseAmount:
+        (isShortTenure
+          ? severanceResult.normalDailySalary
+          : severanceResult.lastIntegralDailySalary) ?? '0.0000',
       days: null,
       amount: severanceResult.severanceAmount,
       formulaText: `Via seleccionada: ${severanceResult.selectedVia}`,
@@ -84,70 +103,142 @@ export class SettlementService {
     sortOrder++;
 
     // Intereses de garantia capitalizados (Art. 143), si existen.
-    const capitalizedInterest = await this.severanceInterest.sumCapitalized(employeeId);
+    const capitalizedInterest =
+      await this.severanceInterest.sumCapitalized(employeeId);
     if (capitalizedInterest.gt(0)) {
       items.push(
-        this.draft('HR-VE-06', 'Intereses sobre la garantia', '143', 'integral', capitalizedInterest, sortOrder++),
+        this.draft(
+          'HR-VE-06',
+          'Intereses sobre la garantia',
+          '143',
+          'integral',
+          capitalizedInterest,
+          sortOrder++,
+        ),
       );
     }
 
     // Vacaciones y bono (causadas o fraccion segun antiguedad).
-    const { totalMonths, completeYears, remainderMonths } = this.monthsAndYears(hireDate, endDate);
+    const { totalMonths, completeYears, remainderMonths } = this.monthsAndYears(
+      hireDate,
+      endDate,
+    );
     if (completeYears >= 1) {
-      const pending = await this.vacationPeriods.pendingValue(tenantId, employeeId, endDate);
+      const pending = await this.vacationPeriods.pendingValue(
+        tenantId,
+        employeeId,
+        endDate,
+      );
       if (Number(pending.totalPendingDays) > 0) {
         items.push(
-          this.draft('HR-VE-13', 'Vacaciones causadas no disfrutadas', '195', 'normal', new Decimal(pending.amount), sortOrder++),
+          this.draft(
+            'HR-VE-13',
+            'Vacaciones causadas no disfrutadas',
+            '195',
+            'normal',
+            new Decimal(pending.amount),
+            sortOrder++,
+          ),
         );
       }
     } else {
       const fraction = this.vacations.fraction(hireDate, endDate);
       if (fraction.totalDays > 0) {
-        const normalDaily = await this.salaryService.getNormalDaily(employeeId, tenantId, endDate);
+        const normalDaily = await this.salaryService.getNormalDaily(
+          employeeId,
+          tenantId,
+          endDate,
+        );
         const amount = normalDaily.mul(fraction.totalDays);
         items.push(
-          this.draft('HR-VE-13', 'Vacaciones y bono vacacional fraccionados', '196', 'normal', amount, sortOrder++),
+          this.draft(
+            'HR-VE-13',
+            'Vacaciones y bono vacacional fraccionados',
+            '196',
+            'normal',
+            amount,
+            sortOrder++,
+          ),
         );
       }
     }
 
     // Utilidades fraccionadas (Art. 131, estimado).
-    const profitFraction = await this.profitSharing.fraction(tenantId, employeeId, endDate);
+    const profitFraction = await this.profitSharing.fraction(
+      tenantId,
+      employeeId,
+      endDate,
+    );
     if (Number(profitFraction.amount) > 0) {
       items.push(
-        this.draft('HR-VE-09', 'Utilidades fraccionadas', '131', 'normal', new Decimal(profitFraction.amount), sortOrder++),
+        this.draft(
+          'HR-VE-09',
+          'Utilidades fraccionadas',
+          '131',
+          'normal',
+          new Decimal(profitFraction.amount),
+          sortOrder++,
+        ),
       );
     }
 
     // Indemnizacion (Art. 92) = mismo monto que las prestaciones seleccionadas.
     if (indemnityApplies(emp.terminationType)) {
       items.push(
-        this.draft('HR-VE-14', 'Indemnizacion Art. 92', '92', 'integral', new Decimal(severanceResult.severanceAmount), sortOrder++),
+        this.draft(
+          'HR-VE-14',
+          'Indemnizacion Art. 92',
+          '92',
+          'integral',
+          new Decimal(severanceResult.severanceAmount),
+          sortOrder++,
+        ),
       );
     }
 
     // Anticipos de prestaciones aprobados (Art. 144) — se RESTAN.
-    const advancesApproved = await this.severanceAdvances.sumApproved(employeeId);
+    const advancesApproved =
+      await this.severanceAdvances.sumApproved(employeeId);
     if (advancesApproved.gt(0)) {
       items.push(
-        this.draft('HR-VE-08', 'Anticipos de prestaciones', '144', 'integral', advancesApproved.neg(), sortOrder++),
+        this.draft(
+          'HR-VE-08',
+          'Anticipos de prestaciones',
+          '144',
+          'integral',
+          advancesApproved.neg(),
+          sortOrder++,
+        ),
       );
     }
 
     // Descuentos por deudas con el patrono, tope 50% del credito acumulado hasta este punto (Art. 154).
-    const creditSoFar = items.reduce((acc, i) => acc.add(new Decimal(i.amount)), new Decimal(0));
+    const creditSoFar = items.reduce(
+      (acc, i) => acc.add(new Decimal(i.amount)),
+      new Decimal(0),
+    );
     const outstandingDebt = await this.outstandingDebt(employeeId);
     if (outstandingDebt.gt(0)) {
       const maxCompensation = creditSoFar.mul(0.5);
       const compensated = Decimal.min(outstandingDebt, maxCompensation);
       if (compensated.gt(0)) {
         items.push(
-          this.draft('HR-VE-17', 'Descuentos (deuda con el patrono)', '154', 'normal', compensated.neg(), sortOrder++),
+          this.draft(
+            'HR-VE-17',
+            'Descuentos (deuda con el patrono)',
+            '154',
+            'normal',
+            compensated.neg(),
+            sortOrder++,
+          ),
         );
       }
     }
 
-    const subtotal = items.reduce((acc, i) => acc.add(new Decimal(i.amount)), new Decimal(0));
+    const subtotal = items.reduce(
+      (acc, i) => acc.add(new Decimal(i.amount)),
+      new Decimal(0),
+    );
 
     // Mora proyectada si el pago (hoy, hipoteticamente) excede los 5 dias (Art. 142.f).
     const today = new Date().toISOString().slice(0, 10);
@@ -177,7 +268,9 @@ export class SettlementService {
       via2Amount: severanceResult.via2Amount,
       selectedVia: severanceResult.selectedVia,
       severanceAmount: severanceResult.severanceAmount,
-      indemnityAmount: indemnityApplies(emp.terminationType) ? severanceResult.severanceAmount : '0.0000',
+      indemnityAmount: indemnityApplies(emp.terminationType)
+        ? severanceResult.severanceAmount
+        : '0.0000',
       subtotal: subtotal.toFixed(4),
       moraDays,
       moraAmount: moraAmount.toFixed(4),
@@ -200,12 +293,19 @@ export class SettlementService {
       dto.termination_date,
     ]);
     if (existing.rows.length) {
-      throw new ConflictException('Ya existe una liquidacion para este empleado y fecha de egreso.');
+      throw new ConflictException(
+        'Ya existe una liquidacion para este empleado y fecha de egreso.',
+      );
     }
 
-    const preview = await this.preview(tenantId, dto.employee_id, dto.termination_date, {
-      breakdown: true,
-    });
+    const preview = await this.preview(
+      tenantId,
+      dto.employee_id,
+      dto.termination_date,
+      {
+        breakdown: true,
+      },
+    );
     const items = (preview as { items: SettlementItemDraft[] }).items;
     const emp = await this.getEmployee(dto.employee_id, tenantId);
     const { completeYears, remainderMonths } = this.monthsAndYears(
@@ -230,7 +330,13 @@ export class SettlementService {
       completeYears,
       remainderMonths,
       preview.lastIntegralDailySalary ?? '0.0000',
-      (await this.salaryService.getNormal(dto.employee_id, tenantId, dto.termination_date)).dailySalary,
+      (
+        await this.salaryService.getNormal(
+          dto.employee_id,
+          tenantId,
+          dto.termination_date,
+        )
+      ).dailySalary,
       preview.via1Amount ?? null,
       preview.via2Amount ?? null,
       preview.selectedVia,
@@ -275,7 +381,9 @@ export class SettlementService {
 
     // Tasa efectiva al momento del pago: el ultimo tramo aplicado.
     const segments = (moraResult as { segments?: { rate: string }[] }).segments;
-    const effectiveRate = segments?.length ? segments[segments.length - 1].rate : null;
+    const effectiveRate = segments?.length
+      ? segments[segments.length - 1].rate
+      : null;
 
     const result = await this.db.query(settlement.pay, [
       dto.payment_date,
@@ -286,7 +394,9 @@ export class SettlementService {
     ]);
 
     if (Number(moraResult.moraAmount) > 0) {
-      const itemsCount = (await this.db.query(settlementItem.listBySettlement, [settlementId])).rows.length;
+      const itemsCount = (
+        await this.db.query(settlementItem.listBySettlement, [settlementId])
+      ).rows.length;
       await this.db.query(settlementItem.create, [
         settlementId,
         'HR-VE-07',
@@ -314,7 +424,9 @@ export class SettlementService {
     const row = await this.assertOwnership(settlementId, tenantId);
     if (!breakdown) return row;
 
-    const items = await this.db.query(settlementItem.listBySettlement, [settlementId]);
+    const items = await this.db.query(settlementItem.listBySettlement, [
+      settlementId,
+    ]);
     return { ...row, items: items.rows };
   }
 
@@ -344,12 +456,16 @@ export class SettlementService {
   }
 
   private async outstandingDebt(employeeId: string): Promise<Decimal> {
-    const result = await this.db.query(hrQueries.employeeDeduction.listOutstandingByEmployee, [
-      employeeId,
-    ]);
+    const result = await this.db.query(
+      hrQueries.employeeDeduction.listOutstandingByEmployee,
+      [employeeId],
+    );
     return result.rows
       .filter((r) => r.kind === 'deuda_patrono')
-      .reduce((acc, r) => acc.add(new Decimal(r.outstanding_balance)), new Decimal(0));
+      .reduce(
+        (acc, r) => acc.add(new Decimal(r.outstanding_balance)),
+        new Decimal(0),
+      );
   }
 
   private monthsAndYears(hireDate: string, endDate: string) {
@@ -385,7 +501,9 @@ export class SettlementService {
   }
 
   private async getEmployee(employeeId: string, tenantId: string) {
-    const result = await this.db.query(employee.getTerminationInfo, [employeeId]);
+    const result = await this.db.query(employee.getTerminationInfo, [
+      employeeId,
+    ]);
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
       throw new NotFoundException(`Empleado ${employeeId} no encontrado.`);
     }

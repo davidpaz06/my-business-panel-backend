@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
@@ -66,9 +71,20 @@ export class OvertimeService {
     return record;
   }
 
-  async validate(tenantId: string, employeeId: string, workDate: string, hours: number) {
+  async validate(
+    tenantId: string,
+    employeeId: string,
+    workDate: string,
+    hours: number,
+  ) {
     const emp = await this.getEmployeeContext(employeeId, tenantId);
-    return this.validateCaps(tenantId, employeeId, workDate, hours, emp.dailyHours);
+    return this.validateCaps(
+      tenantId,
+      employeeId,
+      workDate,
+      hours,
+      emp.dailyHours,
+    );
   }
 
   async listByEmployee(
@@ -81,12 +97,10 @@ export class OvertimeService {
     await this.getEmployeeContext(employeeId, tenantId);
 
     if (kind) {
-      const result = await this.db.query(overtimeRecord.listByEmployeeRangeKind, [
-        employeeId,
-        kind,
-        from,
-        to,
-      ]);
+      const result = await this.db.query(
+        overtimeRecord.listByEmployeeRangeKind,
+        [employeeId, kind, from, to],
+      );
       return result.rows;
     }
 

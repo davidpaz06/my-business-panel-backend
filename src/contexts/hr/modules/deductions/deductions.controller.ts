@@ -1,7 +1,20 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { DeductionsService } from './deductions.service';
-import { CreateDeductionDto, UpdateDeductionDto, ApplyDeductionPaymentDto } from './dto/deduction.dto';
+import {
+  CreateDeductionDto,
+  UpdateDeductionDto,
+  ApplyDeductionPaymentDto,
+} from './dto/deduction.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
@@ -48,7 +61,11 @@ export class DeductionsController {
     @Query('settlementId') settlementId: string,
     @Session() user: IUserSession,
   ) {
-    return this.service.settlementCompensation(user.tenant_id, employeeId, settlementId);
+    return this.service.settlementCompensation(
+      user.tenant_id,
+      employeeId,
+      settlementId,
+    );
   }
 
   @Get(':employeeId')

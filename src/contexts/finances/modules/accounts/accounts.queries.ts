@@ -46,7 +46,7 @@ export const arGroupByClause = `
     sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
     ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
     tc.first_name, tc.last_name, tc.document_number,
-    dsi.digital_sale_invoice_id,
+    dsi.invoice_id,
     ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
     sar.created_at
 `;
@@ -60,7 +60,7 @@ export const arOverviewSelect = `
     ar.tenant_id,
     (tc.first_name || ' ' || tc.last_name)                                   AS customer_name,
     tc.document_number                                                        AS customer_document,
-    dsi.digital_sale_invoice_id,
+    dsi.invoice_id AS digital_sale_invoice_id,
     ar.due_date,
     ar.subtotal,
     COALESCE(sar.tax_amount, 0)                                               AS tax_amount,
@@ -82,7 +82,7 @@ export const arOverviewSelect = `
     ON tc.tenant_customer_id = ar.tenant_customer_id
   LEFT JOIN pos_schema.sale_collection sc
     ON sc.sale_account_receivable_id = sar.sale_account_receivable_id
-  LEFT JOIN pos_schema.digital_sale_invoice dsi
+  LEFT JOIN pos_schema.invoice dsi
     ON dsi.sale_id = sar.sale_id
 `;
 
@@ -111,7 +111,7 @@ export const accountsOverviewQueries = {
         sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
         ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
         tc.first_name, tc.last_name, tc.document_number,
-        dsi.digital_sale_invoice_id,
+        dsi.invoice_id,
         ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
         sar.created_at
       ORDER BY ar.due_date DESC, sar.created_at DESC
@@ -124,7 +124,7 @@ export const accountsOverviewQueries = {
         sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
         ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
         tc.first_name, tc.last_name, tc.document_number,
-        dsi.digital_sale_invoice_id,
+        dsi.invoice_id,
         ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
         sar.created_at
       ORDER BY ar.due_date DESC, sar.created_at DESC

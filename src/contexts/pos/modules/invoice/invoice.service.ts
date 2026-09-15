@@ -5,22 +5,18 @@ import {
 } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
-import {
-  DInvoice,
-  InvoiceDB,
-  FullInvoice,
-} from './interface/d-invoice.interface';
+import { Invoice, InvoiceDB, FullInvoice } from './interface/invoice.interface';
 import { posQueries } from '@pos/pos.queries';
 import { InvalidInvoice } from '@/common/errors/invalid_bill.error';
 import { InvoiceNotFound } from '@/common/errors/invoice_not_found.error';
 
-const { dInvoice } = posQueries;
+const { invoice } = posQueries;
 
 @Injectable()
-export class DInvoiceService {
+export class InvoiceService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
-  async createDInvoice(data: DInvoice, dbClient?: any) {
+  async createInvoice(data: Invoice, dbClient?: any) {
     const {
       tenant_customer_id,
       currency_id,
@@ -38,7 +34,7 @@ export class DInvoiceService {
       sale_id,
     } = data;
     const client = dbClient || this.db;
-    const res = await client.query(dInvoice.create, [
+    const res = await client.query(invoice.create, [
       tenant_customer_id,
       currency_id,
       subtotal_amount,
@@ -59,45 +55,45 @@ export class DInvoiceService {
     // Poblar las lineas de la factura desde los sale_item. El encabezado ya trae
     // los totales autoritativos de la venta; los items alimentan el detalle
     // impreso y el calculo de IVA de notas de credito.
-    await client.query(dInvoice.createItemsFromSale, [
-      res.rows[0].digital_sale_invoice_id,
+    await client.query(invoice.createItemsFromSale, [
+      res.rows[0].invoice_id,
       sale_id,
     ]);
 
-    return { message: 'DInvoice created!', invoice: res.rows[0] };
+    return { message: 'Invoice created!', invoice: res.rows[0] };
   }
 
-  async getTenantDInvoices(tenantId: string): Promise<InvoiceDB[]> {
-    const result = await this.db.query(dInvoice.getBills, [tenantId]);
+  async getTenantInvoices(tenantId: string): Promise<InvoiceDB[]> {
+    const result = await this.db.query(invoice.getBills, [tenantId]);
     return result.rows;
   }
 
-  async getCustomerDInvoices(
+  async getCustomerInvoices(
     tenantId: string,
     doc: string,
   ): Promise<InvoiceDB[]> {
-    const result = await this.db.query(dInvoice.getCustomerDInvoices, [
+    const result = await this.db.query(invoice.getCustomerInvoices, [
       tenantId,
       doc,
     ]);
     return result.rows;
   }
 
-  async getDInvoiceById(saleId: string): Promise<FullInvoice> {
-    const result = await this.db.query(dInvoice.getDInvoiceById, [saleId]);
+  async getInvoiceById(saleId: string): Promise<FullInvoice> {
+    const result = await this.db.query(invoice.getInvoiceById, [saleId]);
     if (result.rows.length == 0) throw new InvoiceNotFound();
     return result.rows[0];
   }
 
-  async getDInvoiceBySaleId(saleId: string): Promise<FullInvoice | null> {
-    const result = await this.db.query(dInvoice.getDInvoiceBySaleId, [saleId]);
+  async getInvoiceBySaleId(saleId: string): Promise<FullInvoice | null> {
+    const result = await this.db.query(invoice.getInvoiceBySaleId, [saleId]);
     return result.rows[0] ?? null;
   }
 
-  async deleteDInvoice(invoiceId: string) {
-    const result = await this.db.query(dInvoice.deleteDInvoice, [invoiceId]);
+  async deleteInvoice(invoiceId: string) {
+    const result = await this.db.query(invoice.deleteInvoice, [invoiceId]);
     if (result.rows.length == 0)
       throw new InternalServerErrorException('Error deleting invoice from db.');
-    return { message: `DInvoice with id: ${invoiceId} deleted` };
+    return { message: `Invoice with id: ${invoiceId} deleted` };
   }
 }

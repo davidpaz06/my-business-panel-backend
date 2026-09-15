@@ -1,4 +1,11 @@
-import { IsDateString, IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateSalaryHistoryDto {
   @IsUUID()

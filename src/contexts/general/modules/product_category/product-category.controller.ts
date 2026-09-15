@@ -37,20 +37,12 @@ export class ProductCategoryController {
   @Get()
   async getAll(
     @Query('search') search?: string,
-    @Query('cabys_code') cabysCode?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
     const parsedLimit = limit ? parseInt(limit, 10) : 100;
     const parsedOffset = offset ? parseInt(offset, 10) : 0;
 
-    if (cabysCode !== undefined) {
-      return this.productCategoryService.getAllCategoriesByCabysCode(
-        cabysCode || null,
-        parsedLimit,
-        parsedOffset,
-      );
-    }
     if (limit !== undefined || offset !== undefined || search !== undefined) {
       return this.productCategoryService.getAllCategoriesPaginated(
         search || null,

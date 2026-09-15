@@ -1,4 +1,10 @@
-import { IsDateString, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateBeneficiaryDto {
   @IsUUID()
@@ -10,7 +16,14 @@ export class CreateBeneficiaryDto {
   @IsString()
   doc_number!: string;
 
-  @IsIn(['hijo', 'conyuge', 'pareja_estable', 'padre', 'madre', 'nieto_huerfano'])
+  @IsIn([
+    'hijo',
+    'conyuge',
+    'pareja_estable',
+    'padre',
+    'madre',
+    'nieto_huerfano',
+  ])
   relationship!: string;
 
   @IsDateString()

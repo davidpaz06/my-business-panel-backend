@@ -236,10 +236,10 @@ export class ProductService {
       if (error instanceof BadRequestException) throw error;
       if (
         error?.code === '23503' &&
-        error?.constraint === 'product_variant_cabys_code_fkey'
+        error?.constraint === 'product_variant_product_id_fkey'
       ) {
         throw new BadRequestException(
-          `The cabys_code provided does not exist in the CABYS catalog`,
+          `The product_id provided does not exist in the product catalog`,
         );
       }
       throw new InternalServerErrorException(error);

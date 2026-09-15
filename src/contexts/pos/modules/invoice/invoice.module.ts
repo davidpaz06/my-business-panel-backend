@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { DInvoiceController } from './d-invoice.controller';
-import { DInvoiceService } from './d-invoice.service';
+import { InvoiceController } from './invoice.controller';
+import { InvoiceService } from './invoice.service';
 
 @Module({
-  controllers: [DInvoiceController],
-  providers: [DInvoiceService],
-  exports: [DInvoiceService],
+  controllers: [InvoiceController],
+  providers: [InvoiceService],
+  exports: [InvoiceService],
 })
-export class DInvoiceModule {}
+export class InvoiceModule {}

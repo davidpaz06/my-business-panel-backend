@@ -105,7 +105,8 @@ export class SeveranceDepositService {
 
     const result = await this.db.query(severanceDeposit.updateDepositMade, [
       dto.deposit_made,
-      dto.deposit_date ?? (dto.deposit_made ? new Date().toISOString().slice(0, 10) : null),
+      dto.deposit_date ??
+        (dto.deposit_made ? new Date().toISOString().slice(0, 10) : null),
       depositId,
     ]);
 

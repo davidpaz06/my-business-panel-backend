@@ -6,8 +6,6 @@ import {
   IsUUID,
   IsArray,
   ValidateNested,
-  Length,
-  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -29,10 +27,8 @@ export class NewProductDto {
   variant_name!: string;
 
   @IsOptional()
-  @IsString()
-  @Length(13, 13, { message: 'cabys_code must be exactly 13 characters' })
-  @Matches(/^\d{13}$/, { message: 'cabys_code must contain exactly 13 digits' })
-  cabys_code?: string;
+  @IsUUID()
+  product_id?: string;
 
   @IsNumber()
   unit_price!: number;
@@ -72,7 +68,7 @@ export interface ProductInsert {
   tenant_id: string;
   sku: string;
   variant_name: string;
-  cabys_code?: string;
+  product_id?: string;
   unit_price: number;
   cost_price?: number;
   supplier_id?: string;

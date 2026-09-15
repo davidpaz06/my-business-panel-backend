@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 export class CreateCollectionDto {
   @IsUUID()

@@ -31,13 +31,21 @@ export class ProfitSharingService {
     const dateInYear = `${year}-12-01`;
     let diasUtilidades: Decimal;
     try {
-      diasUtilidades = await this.parameters.resolve(tenantId, 'dias_utilidades', dateInYear);
+      diasUtilidades = await this.parameters.resolve(
+        tenantId,
+        'dias_utilidades',
+        dateInYear,
+      );
     } catch {
       diasUtilidades = new Decimal(MIN_YEAR_END_BONUS_DAYS);
     }
 
     const days = Decimal.max(diasUtilidades, MIN_YEAR_END_BONUS_DAYS);
-    const normalDaily = await this.salaryService.getNormalDaily(employeeId, tenantId, dateInYear);
+    const normalDaily = await this.salaryService.getNormalDaily(
+      employeeId,
+      tenantId,
+      dateInYear,
+    );
     const amount = normalDaily.mul(days);
 
     const periodResult = await this.db.query(profitSharingPeriod.getByYear, [
@@ -57,19 +65,26 @@ export class ProfitSharingService {
       yearEndBonus: amount.toFixed(4),
     };
 
-    return explain ? { ...base, diasUtilidades: diasUtilidades.toFixed(2) } : base;
+    return explain
+      ? { ...base, diasUtilidades: diasUtilidades.toFixed(2) }
+      : base;
   }
 
   async payYearEndBonus(tenantId: string, dto: YearEndBonusDto) {
     let period = (
-      await this.db.query(profitSharingPeriod.getByYear, [tenantId, dto.fiscal_year])
+      await this.db.query(profitSharingPeriod.getByYear, [
+        tenantId,
+        dto.fiscal_year,
+      ])
     ).rows[0];
 
     if (!period) {
       // Art. 137: 2 meses tras el cierre. Dic-31 + 2 meses = Feb-28/29,
       // nunca Marzo (ver profit-sharing-period.service.ts addMonths).
       const yearEnd = `${dto.fiscal_year}-12-31`;
-      const lastDayFeb = new Date(Date.UTC(dto.fiscal_year + 1, 2, 0)).getUTCDate();
+      const lastDayFeb = new Date(
+        Date.UTC(dto.fiscal_year + 1, 2, 0),
+      ).getUTCDate();
       const paymentDeadline = `${dto.fiscal_year + 1}-02-${String(lastDayFeb).padStart(2, '0')}`;
 
       const created = await this.db.query(profitSharingPeriod.create, [
@@ -123,10 +138,17 @@ export class ProfitSharingService {
     const hire = new Date(`${empResult.rows[0].hire_date}T00:00:00Z`);
     const start = new Date(yearStart);
     const effectiveStart = hire > start ? hire : start;
-    const { totalMonths } = monthsBetween(effectiveStart, new Date(`${endDate}T00:00:00Z`));
+    const { totalMonths } = monthsBetween(
+      effectiveStart,
+      new Date(`${endDate}T00:00:00Z`),
+    );
     const completeMonths = Math.min(totalMonths, 12);
 
-    const normalDaily = await this.salaryService.getNormalDaily(employeeId, tenantId, endDate);
+    const normalDaily = await this.salaryService.getNormalDaily(
+      employeeId,
+      tenantId,
+      endDate,
+    );
     const days = (MIN_YEAR_END_BONUS_DAYS * completeMonths) / 12;
     const amount = normalDaily.mul(days);
 

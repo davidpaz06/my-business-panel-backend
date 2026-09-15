@@ -50,7 +50,9 @@ export class CollectionAlertsController {
     return this.collectionAlertsService.getConfig(session, tenantId);
   }
 
-  @ApiOperation({ summary: 'Crear o actualizar configuración de alertas de cobro' })
+  @ApiOperation({
+    summary: 'Crear o actualizar configuración de alertas de cobro',
+  })
   @Post('config')
   upsertConfig(
     @Body() dto: UpsertCollectionAlertConfigDto,

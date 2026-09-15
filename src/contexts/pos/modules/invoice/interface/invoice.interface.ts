@@ -1,4 +1,4 @@
-export interface DInvoice {
+export interface Invoice {
   tenant_customer_id: string | null;
   currency_id: number;
   subtotal_amount: number;
@@ -16,11 +16,10 @@ export interface DInvoice {
 }
 
 export interface FullInvoiceItem {
-  digital_sale_invoice_item_id: string;
+  invoice_item_id: string;
   description: string | null;
   sku: string | null;
   variant_name: string | null;
-  cabys_code: string | null;
   quantity: number;
   unit_price: number;
   subtotal: number;
@@ -43,7 +42,7 @@ export interface FullInvoicePayment {
 }
 
 export interface FullInvoice {
-  digital_sale_invoice_id: string;
+  invoice_id: string;
   subtotal_amount: number;
   tax_amount: number;
   total_amount: number;
@@ -78,7 +77,6 @@ export interface FullInvoice {
   sale_condition: string | null;
   sale_condition_desc: string | null;
   sale_date: string;
-  has_electronic_invoice: boolean;
   seller_user_id: string | null;
   seller_email: string | null;
   currency_code: string | null;

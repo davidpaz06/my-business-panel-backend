@@ -1,15 +1,15 @@
-// src/docs/contexts/pos/d-invoice/get-customer-d-invoices.doc.ts
-export const getCustomerDInvoicesDoc = {
+// src/docs/contexts/pos/invoice/get-customer-invoices.doc.ts
+export const getCustomerInvoicesDoc = {
   operation: {
-    summary: 'Get customer d-invoices',
+    summary: 'Get customer invoices',
     description:
-      'Returns digital invoices for a customer filtered by tenant and document number.',
+      'Returns invoices for a customer filtered by tenant and document number.',
   },
 
   responses: {
     200: {
       status: 200,
-      description: 'List of digital invoices matching the filter.',
+      description: 'List of invoices matching the filter.',
       schema: {
         type: 'array',
         items: {

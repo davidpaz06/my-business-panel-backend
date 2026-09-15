@@ -28,7 +28,6 @@ import { ProductVariantGroupAssignmentModule } from '@/contexts/general/modules/
 import { CustomerPaymentModule } from '@/contexts/general/modules/customer_payment/customer-payment.module';
 import { SegmentModule } from '@/contexts/general/modules/segment/segment.module';
 import { BranchModule } from '@/contexts/general/modules/branch/branch.module';
-import { TenantHaciendaConfigModule } from '@/contexts/general/modules/tenant_hacienda_config/tenant-hacienda-config.module';
 import { RegionModule } from '@/contexts/general/modules/region/region.module';
 import { SpecialCodeModule } from '@/contexts/general/modules/special_code/special_code.module';
 import { CurrencyModule } from '@/contexts/general/modules/currency/currency.module';
@@ -37,8 +36,7 @@ import { ExchangeRateModule } from '@/contexts/general/modules/exchange_rate/exc
 // POS Modules
 import { SaleModule } from '@/contexts/pos/modules/sale/sale.module';
 import { SaleItemModule } from '@/contexts/pos/modules/sale-item/sale-item.module';
-import { DInvoiceModule } from '@/contexts/pos/modules/d-invoice/d-invoice.module';
-import { EInvoiceModule } from '@/contexts/pos/modules/e-invoice/e-invoice.module';
+import { InvoiceModule } from '@/contexts/pos/modules/invoice/invoice.module';
 import { PromosModule } from '@/contexts/pos/modules/promos/promos.module';
 import { ReturnsModule } from '@/contexts/pos/modules/returns/returns.module';
 import { CashRegisterModule } from '@/contexts/pos/modules/cash_register/cash_register.module';
@@ -118,7 +116,7 @@ import { IvaModule } from '@/contexts/finances/modules/iva/iva.module';
     StripeModule,
     SaleModule,
     SaleItemModule,
-    DInvoiceModule,
+    InvoiceModule,
     PromosModule,
     SegmentModule,
     ReturnsModule,
@@ -158,8 +156,6 @@ import { IvaModule } from '@/contexts/finances/modules/iva/iva.module';
     TurnsModule,
     FoulModule,
     TardinessModule,
-    EInvoiceModule,
-    TenantHaciendaConfigModule,
     RegionModule,
     SpecialCodeModule,
     CurrencyModule,

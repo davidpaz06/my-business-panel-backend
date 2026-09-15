@@ -1,4 +1,13 @@
-import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsUUID, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 export class CalculateMoraDto {
   @IsNumber()

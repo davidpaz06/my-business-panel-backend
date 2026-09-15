@@ -10,7 +10,10 @@ import { hrQueries } from '@hr/hr.queries';
 import { NewEmployeeDto, NewSingleEmployeeDto } from './dto/newEmployeeDto.dto';
 import { CreateFullEmployeeError } from '@/common/errors/create_full_employee.error';
 import { UpdateEmployeeDto } from './dto/updateEmployee.dto';
-import { TerminateEmployeeDto, UpdateTerminationDto } from './dto/terminateEmployee.dto';
+import {
+  TerminateEmployeeDto,
+  UpdateTerminationDto,
+} from './dto/terminateEmployee.dto';
 
 const { employee } = hrQueries;
 
@@ -242,7 +245,9 @@ export class EmployeeService {
   }
 
   async updateTermination(employee_id: string, data: UpdateTerminationDto) {
-    const existing = await this.db.query(employee.getTerminationInfo, [employee_id]);
+    const existing = await this.db.query(employee.getTerminationInfo, [
+      employee_id,
+    ]);
     if (!existing.rows.length) return new Error('Employee not found.');
 
     const terminationDate = existing.rows[0].termination_date;

@@ -1,9 +1,18 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { hrQueries } from '@hr/hr.queries';
-import { CreateBeneficiaryDto, ValidateBeneficiaryDto, DistributeSettlementDto } from './dto/beneficiary.dto';
+import {
+  CreateBeneficiaryDto,
+  ValidateBeneficiaryDto,
+  DistributeSettlementDto,
+} from './dto/beneficiary.dto';
 
 const { employeeBeneficiary, employee, settlement } = hrQueries;
 
@@ -44,7 +53,11 @@ export class BeneficiariesService {
     return result.rows[0];
   }
 
-  async validate(tenantId: string, beneficiaryId: string, dto: ValidateBeneficiaryDto) {
+  async validate(
+    tenantId: string,
+    beneficiaryId: string,
+    dto: ValidateBeneficiaryDto,
+  ) {
     await this.assertOwnership(beneficiaryId, tenantId);
     const result = await this.db.query(employeeBeneficiary.validate, [
       dto.validated_at,
@@ -55,7 +68,9 @@ export class BeneficiariesService {
 
   async claimWindow(tenantId: string, employeeId: string) {
     const emp = await this.getEmployeeTermination(employeeId, tenantId);
-    const list = await this.db.query(employeeBeneficiary.listByEmployee, [employeeId]);
+    const list = await this.db.query(employeeBeneficiary.listByEmployee, [
+      employeeId,
+    ]);
 
     const deadline = emp.termination_date
       ? addDays(emp.termination_date, CLAIM_WINDOW_DAYS)
@@ -71,18 +86,32 @@ export class BeneficiariesService {
   }
 
   /** Reparto en partes iguales entre los reclamantes VALIDADOS (Art. 145). */
-  async distribute(tenantId: string, employeeId: string, dto: DistributeSettlementDto) {
-    const validated = await this.db.query(employeeBeneficiary.listValidatedByEmployee, [
-      employeeId,
-    ]);
+  async distribute(
+    tenantId: string,
+    employeeId: string,
+    dto: DistributeSettlementDto,
+  ) {
+    const validated = await this.db.query(
+      employeeBeneficiary.listValidatedByEmployee,
+      [employeeId],
+    );
 
     if (!validated.rows.length) {
-      throw new BadRequestException('No hay reclamantes validados para repartir (Art. 145).');
+      throw new BadRequestException(
+        'No hay reclamantes validados para repartir (Art. 145).',
+      );
     }
 
-    const settlementRow = await this.db.query(settlement.getById, [dto.settlement_id]);
-    if (!settlementRow.rows.length || settlementRow.rows[0].tenant_id !== tenantId) {
-      throw new NotFoundException(`Liquidacion ${dto.settlement_id} no encontrada.`);
+    const settlementRow = await this.db.query(settlement.getById, [
+      dto.settlement_id,
+    ]);
+    if (
+      !settlementRow.rows.length ||
+      settlementRow.rows[0].tenant_id !== tenantId
+    ) {
+      throw new NotFoundException(
+        `Liquidacion ${dto.settlement_id} no encontrada.`,
+      );
     }
 
     const total = new Decimal(
@@ -111,20 +140,28 @@ export class BeneficiariesService {
   }
 
   async list(employeeId: string, onlyValidated?: boolean) {
-    const result = await this.db.query(employeeBeneficiary.listByEmployee, [employeeId]);
+    const result = await this.db.query(employeeBeneficiary.listByEmployee, [
+      employeeId,
+    ]);
     if (onlyValidated === undefined) return result.rows;
     return result.rows.filter((r) => r.validated === onlyValidated);
   }
 
   private async assertOwnership(beneficiaryId: string, tenantId: string) {
-    const result = await this.db.query(employeeBeneficiary.getById, [beneficiaryId]);
+    const result = await this.db.query(employeeBeneficiary.getById, [
+      beneficiaryId,
+    ]);
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
-      throw new NotFoundException(`Beneficiario ${beneficiaryId} no encontrado.`);
+      throw new NotFoundException(
+        `Beneficiario ${beneficiaryId} no encontrado.`,
+      );
     }
   }
 
   private async getEmployeeTermination(employeeId: string, tenantId: string) {
-    const result = await this.db.query(employee.getTerminationInfo, [employeeId]);
+    const result = await this.db.query(employee.getTerminationInfo, [
+      employeeId,
+    ]);
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
       throw new NotFoundException(`Empleado ${employeeId} no encontrado.`);
     }

@@ -1,10 +1,19 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { hrQueries } from '@hr/hr.queries';
 import { SalaryHistoryService } from '../salary/salary-history.service';
-import { CreateProfitPeriodDto, SetLiquidBenefitsDto, UpdatePercentageDto } from './dto/profit-sharing.dto';
+import {
+  CreateProfitPeriodDto,
+  SetLiquidBenefitsDto,
+  UpdatePercentageDto,
+} from './dto/profit-sharing.dto';
 import { monthsBetween } from '../severance/interfaces/severance-calculation';
 
 const { profitSharingPeriod, profitSharingDetail, employee } = hrQueries;
@@ -25,9 +34,13 @@ function addMonths(date: string, n: number): string {
   const targetIndex = d.getUTCMonth() + n;
   const targetYear = d.getUTCFullYear() + Math.floor(targetIndex / 12);
   const targetMonth = ((targetIndex % 12) + 12) % 12;
-  const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetYear, targetMonth + 1, 0),
+  ).getUTCDate();
   const clampedDay = Math.min(day, lastDayOfTargetMonth);
-  return new Date(Date.UTC(targetYear, targetMonth, clampedDay)).toISOString().slice(0, 10);
+  return new Date(Date.UTC(targetYear, targetMonth, clampedDay))
+    .toISOString()
+    .slice(0, 10);
 }
 
 @Injectable()
@@ -60,12 +73,18 @@ export class ProfitSharingPeriodService {
       year,
     ]);
     if (!result.rows.length) {
-      throw new NotFoundException(`No hay ejercicio de utilidades para el anio ${year}.`);
+      throw new NotFoundException(
+        `No hay ejercicio de utilidades para el anio ${year}.`,
+      );
     }
     return result.rows[0];
   }
 
-  async setLiquidBenefits(tenantId: string, periodId: string, dto: SetLiquidBenefitsDto) {
+  async setLiquidBenefits(
+    tenantId: string,
+    periodId: string,
+    dto: SetLiquidBenefitsDto,
+  ) {
     await this.assertOwnership(periodId, tenantId);
     const result = await this.db.query(profitSharingPeriod.setLiquidBenefits, [
       dto.liquid_benefits,
@@ -74,7 +93,11 @@ export class ProfitSharingPeriodService {
     return result.rows[0];
   }
 
-  async updatePercentage(tenantId: string, periodId: string, dto: UpdatePercentageDto) {
+  async updatePercentage(
+    tenantId: string,
+    periodId: string,
+    dto: UpdatePercentageDto,
+  ) {
     await this.assertOwnership(periodId, tenantId);
 
     if (dto.distribution_percentage < MIN_DISTRIBUTION_PERCENTAGE) {
@@ -104,13 +127,22 @@ export class ProfitSharingPeriodService {
       throw new BadRequestException('Un ejercicio cerrado no se recalcula.');
     }
     if (!period.liquid_benefits) {
-      throw new BadRequestException('Cargar los beneficios liquidos antes de calcular.');
+      throw new BadRequestException(
+        'Cargar los beneficios liquidos antes de calcular.',
+      );
     }
 
-    const employees = await this.db.query(employee.listActiveForTenant, [tenantId]);
+    const employees = await this.db.query(employee.listActiveForTenant, [
+      tenantId,
+    ]);
     const distributable = new Decimal(period.distributable_amount);
 
-    const rows: { employeeId: string; earnedSalary: Decimal; completeMonths: number; dailySalary: Decimal }[] = [];
+    const rows: {
+      employeeId: string;
+      earnedSalary: Decimal;
+      completeMonths: number;
+      dailySalary: Decimal;
+    }[] = [];
     let totalEarned = new Decimal(0);
 
     for (const emp of employees.rows) {
@@ -151,8 +183,14 @@ export class ProfitSharingPeriodService {
         ? new Decimal(0)
         : distributable.div(totalEarned).mul(row.earnedSalary);
 
-      const minCap = row.dailySalary.mul(MIN_DAYS).mul(row.completeMonths).div(12);
-      const maxCap = row.dailySalary.mul(MAX_DAYS).mul(row.completeMonths).div(12);
+      const minCap = row.dailySalary
+        .mul(MIN_DAYS)
+        .mul(row.completeMonths)
+        .div(12);
+      const maxCap = row.dailySalary
+        .mul(MAX_DAYS)
+        .mul(row.completeMonths)
+        .div(12);
       const finalAmount = Decimal.max(minCap, Decimal.min(rawQuota, maxCap));
 
       const result = await this.db.query(profitSharingDetail.upsert, [
@@ -169,18 +207,31 @@ export class ProfitSharingPeriodService {
       details.push(result.rows[0]);
     }
 
-    await this.db.query(profitSharingPeriod.setTotals, [totalEarned.toFixed(4), periodId]);
+    await this.db.query(profitSharingPeriod.setTotals, [
+      totalEarned.toFixed(4),
+      periodId,
+    ]);
 
-    return { totalEarnedSalaries: totalEarned.toFixed(4), employeeCount: details.length, details };
+    return {
+      totalEarnedSalaries: totalEarned.toFixed(4),
+      employeeCount: details.length,
+      details,
+    };
   }
 
   async listDetails(tenantId: string, periodId: string) {
     await this.assertOwnership(periodId, tenantId);
-    const result = await this.db.query(profitSharingDetail.listByPeriod, [periodId]);
+    const result = await this.db.query(profitSharingDetail.listByPeriod, [
+      periodId,
+    ]);
     return result.rows;
   }
 
-  async getDetailByEmployee(tenantId: string, periodId: string, employeeId: string) {
+  async getDetailByEmployee(
+    tenantId: string,
+    periodId: string,
+    employeeId: string,
+  ) {
     await this.assertOwnership(periodId, tenantId);
     const result = await this.db.query(profitSharingDetail.getByEmployee, [
       periodId,
@@ -212,13 +263,20 @@ export class ProfitSharingPeriodService {
     );
     const completeMonths = Math.min(totalMonths, 12);
 
-    return { completeMonths, minDays: MIN_DAYS, maxDays: MAX_DAYS, article: '131' };
+    return {
+      completeMonths,
+      minDays: MIN_DAYS,
+      maxDays: MAX_DAYS,
+      article: '131',
+    };
   }
 
   private async assertOwnership(periodId: string, tenantId: string) {
     const result = await this.db.query(profitSharingPeriod.getById, [periodId]);
     if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
-      throw new NotFoundException(`Ejercicio de utilidades ${periodId} no encontrado.`);
+      throw new NotFoundException(
+        `Ejercicio de utilidades ${periodId} no encontrado.`,
+      );
     }
     return result.rows[0];
   }

@@ -13,7 +13,10 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { EmployeeService } from './employee.service';
 import { NewEmployeeDto } from './dto/newEmployeeDto.dto';
 import { UpdateEmployeeDto } from './dto/updateEmployee.dto';
-import { TerminateEmployeeDto, UpdateTerminationDto } from './dto/terminateEmployee.dto';
+import {
+  TerminateEmployeeDto,
+  UpdateTerminationDto,
+} from './dto/terminateEmployee.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import {
   getEmployeesByTenantDoc,

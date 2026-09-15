@@ -1,14 +1,14 @@
-// src/docs/contexts/pos/d-invoice/get-tenant-d-invoices.doc.ts
-export const getTenantDInvoicesDoc = {
+// src/docs/contexts/pos/invoice/get-tenant-invoices.doc.ts
+export const getTenantInvoicesDoc = {
   operation: {
-    summary: 'Get d-invoices by tenant',
-    description: 'Returns all digital invoices associated with a tenant.',
+    summary: 'Get invoices by tenant',
+    description: 'Returns all invoices associated with a tenant.',
   },
 
   responses: {
     200: {
       status: 200,
-      description: 'List of digital invoices for the tenant.',
+      description: 'List of invoices for the tenant.',
       schema: {
         type: 'array',
         items: {

@@ -1,7 +1,19 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { BeneficiariesService } from './beneficiaries.service';
-import { CreateBeneficiaryDto, ValidateBeneficiaryDto, DistributeSettlementDto } from './dto/beneficiary.dto';
+import {
+  CreateBeneficiaryDto,
+  ValidateBeneficiaryDto,
+  DistributeSettlementDto,
+} from './dto/beneficiary.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
@@ -27,7 +39,10 @@ export class BeneficiariesController {
   }
 
   @Get(':employeeId/claim-window')
-  claimWindow(@Param('employeeId') employeeId: string, @Session() user: IUserSession) {
+  claimWindow(
+    @Param('employeeId') employeeId: string,
+    @Session() user: IUserSession,
+  ) {
     return this.service.claimWindow(user.tenant_id, employeeId);
   }
 

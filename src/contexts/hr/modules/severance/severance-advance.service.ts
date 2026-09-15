@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
@@ -6,7 +11,11 @@ import { hrQueries } from '@hr/hr.queries';
 import { ParametersService } from '../parameters/parameters.service';
 import { SeveranceDepositService } from './severance-deposit.service';
 import { SeveranceInterestService } from './severance-interest.service';
-import { CreateAdvanceDto, ApproveAdvanceDto, RejectAdvanceDto } from './dto/severance.dto';
+import {
+  CreateAdvanceDto,
+  ApproveAdvanceDto,
+  RejectAdvanceDto,
+} from './dto/severance.dto';
 
 const { severanceAdvance } = hrQueries;
 

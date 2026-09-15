@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { ParametersService } from '../parameters/parameters.service';
 import { CalculateMoraDto, SalaryMinimumDifferenceDto } from './dto/mora.dto';
@@ -41,7 +45,10 @@ export class MoraService {
       };
     }
 
-    const timeline = await this.parameters.getTimeline(tenantId, 'tasa_activa_bcv');
+    const timeline = await this.parameters.getTimeline(
+      tenantId,
+      'tasa_activa_bcv',
+    );
 
     if (!timeline.length) {
       throw new BadRequestException(
@@ -59,7 +66,13 @@ export class MoraService {
     ).sort();
 
     let totalAmount = new Decimal(0);
-    const segments: { from: string; to: string; rate: string; days: number; amount: string }[] = [];
+    const segments: {
+      from: string;
+      to: string;
+      rate: string;
+      days: number;
+      amount: string;
+    }[] = [];
 
     for (let i = 0; i < points.length - 1; i++) {
       const segStart = points[i];
@@ -113,7 +126,10 @@ export class MoraService {
   }
 
   /** Diferencia por salario inferior al minimo + mora (Art. 130). */
-  async salaryMinimumDifference(tenantId: string, dto: SalaryMinimumDifferenceDto) {
+  async salaryMinimumDifference(
+    tenantId: string,
+    dto: SalaryMinimumDifferenceDto,
+  ) {
     let minimumWage: Decimal;
     try {
       minimumWage = await this.parameters.resolve(

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ProfitSharingService } from './profit-sharing.service';
 import { ProfitSharingPeriodService } from './profit-sharing-period.service';
@@ -22,7 +31,10 @@ export class ProfitSharingController {
   ) {}
 
   @Post('periods')
-  createPeriod(@Body() body: CreateProfitPeriodDto, @Session() user: IUserSession) {
+  createPeriod(
+    @Body() body: CreateProfitPeriodDto,
+    @Session() user: IUserSession,
+  ) {
     return this.periods.create(user.tenant_id, body);
   }
 
@@ -111,7 +123,10 @@ export class ProfitSharingController {
   }
 
   @Post('year-end-bonus')
-  payYearEndBonus(@Body() body: YearEndBonusDto, @Session() user: IUserSession) {
+  payYearEndBonus(
+    @Body() body: YearEndBonusDto,
+    @Session() user: IUserSession,
+  ) {
     return this.service.payYearEndBonus(user.tenant_id, body);
   }
 

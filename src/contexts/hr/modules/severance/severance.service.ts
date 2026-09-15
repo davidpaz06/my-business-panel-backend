@@ -65,7 +65,10 @@ export class SeveranceService {
   calculatePreview(hireDate: string, endDate: string) {
     const hire = new Date(`${hireDate}T00:00:00Z`);
     const end = new Date(`${endDate}T00:00:00Z`);
-    const { completeYears, remainderMonths, totalMonths } = monthsBetween(hire, end);
+    const { completeYears, remainderMonths, totalMonths } = monthsBetween(
+      hire,
+      end,
+    );
 
     if (totalMonths < 3) {
       const monthsOrFraction = Math.ceil(daysBetween(hire, end) / 30);
@@ -94,7 +97,10 @@ export class SeveranceService {
     const emp = await this.getEmployee(employeeId, tenantId);
     const hire = new Date(`${emp.hireDate}T00:00:00Z`);
     const end = new Date(`${endDate}T00:00:00Z`);
-    const { completeYears, remainderMonths, totalMonths } = monthsBetween(hire, end);
+    const { completeYears, remainderMonths, totalMonths } = monthsBetween(
+      hire,
+      end,
+    );
 
     // Excepcion antiguedad < 3 meses (Art. 142.e): sustituye ambos esquemas.
     if (totalMonths < 3) {
@@ -103,7 +109,11 @@ export class SeveranceService {
         'dias_por_mes_antiguedad_corta',
         endDate,
       );
-      const dailySalary = await this.salaryService.getNormalDaily(employeeId, tenantId, endDate);
+      const dailySalary = await this.salaryService.getNormalDaily(
+        employeeId,
+        tenantId,
+        endDate,
+      );
       const monthsOrFraction = Math.ceil(daysBetween(hire, end) / 30);
       const amount = dailySalary.mul(diasPorMes).mul(monthsOrFraction);
 
@@ -120,7 +130,11 @@ export class SeveranceService {
       };
     }
 
-    const lastIntegralDaily = await this.salaryService.getIntegralDaily(employeeId, tenantId, endDate);
+    const lastIntegralDaily = await this.salaryService.getIntegralDaily(
+      employeeId,
+      tenantId,
+      endDate,
+    );
 
     // Via 1 (142.a + 142.b): garantia depositada + dias adicionales.
     const depositsSum = await this.deposits.sumMadeAmount(employeeId);
