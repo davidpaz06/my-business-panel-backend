@@ -1163,7 +1163,6 @@ export const generalQueryDefs = {
     `,
   },
 
-
   subscriptions: {
     cancelSubscription:
       'UPDATE general_schema.tenant SET is_subscribed = false WHERE tenant_id = $1',

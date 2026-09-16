@@ -22,7 +22,10 @@ export const getProductBySkuDoc = {
           },
           sku: { type: 'string', example: 'SKU-001' },
           variant_name: { type: 'string', example: 'Red T-Shirt M' },
-          product_id: { type: 'string', example: '123e4567-e89b-12d3-a456-426614174111' },
+          product_id: {
+            type: 'string',
+            example: '123e4567-e89b-12d3-a456-426614174111',
+          },
           unit_price: { type: 'number', example: 15000 },
         },
       },
