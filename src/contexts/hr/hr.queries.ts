@@ -637,6 +637,9 @@ export const hrQueryDefs = {
     getByBranch: `
       SELECT * FROM hr_schema.turn WHERE branch_id = $1
     `,
+    getById: `
+      SELECT * FROM hr_schema.turn WHERE turn_id = $1
+    `,
     updateTurn: `
       UPDATE hr_schema.turn
       SET
