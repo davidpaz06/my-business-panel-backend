@@ -5,8 +5,9 @@ import { ContractDto } from '../employee/dto/newEmployeeDto.dto';
 import { hrQueries } from '@hr/hr.queries';
 import { Contract } from '../employee/interface/employee.interface';
 import { JOURNEY_LIMITS } from '../journey/interfaces/journey-limits.interface';
+import { classifyJourney } from '../journey/interfaces/journey-classification';
 
-const { contract } = hrQueries;
+const { contract, turns } = hrQueries;
 
 @Injectable()
 export class ContractService {
@@ -26,22 +27,38 @@ export class ContractService {
       hours,
       base_salary,
       duties_type_id,
-      turn_type,
       turn_id,
-      journey_type,
       weekly_hours,
     } = data;
 
+    // turn_type y journey_type NUNCA se aceptan del cliente: son un
+    // derivado del turno vinculado (entry/out -> classifyJourney,
+    // Art. 173 LOTTT), no un dato editable a mano.
+    const effectiveTurnId = turn_id ?? current.turn_id;
+    if (!effectiveTurnId) {
+      throw new BadRequestException(
+        'El contrato debe tener un turno asignado.',
+      );
+    }
+
+    const turnResult = await this.db.query(turns.getById, [effectiveTurnId]);
+    if (turnResult.rows.length === 0) {
+      throw new BadRequestException(`Turno ${effectiveTurnId} no encontrado.`);
+    }
+
+    const turnRow = turnResult.rows[0];
+    const classification = classifyJourney(turnRow.entry, turnRow.out);
+    const derivedJourneyType = classification.effectiveJourney;
+    const derivedTurnType = Number(classification.totalHours.toFixed(2));
+
     // Art. 173 LOTTT: el tope semanal depende del tipo de jornada
-    // EFECTIVO tras la actualizacion (el que se envia, o el que ya
-    // tenia el contrato si no cambia en este PATCH).
-    const effectiveJourneyType = journey_type ?? current.journey_type;
+    // EFECTIVO tras la actualizacion.
     const effectiveWeeklyHours = weekly_hours ?? current.weekly_hours;
-    const limit = JOURNEY_LIMITS[effectiveJourneyType];
+    const limit = JOURNEY_LIMITS[derivedJourneyType];
 
     if (limit && Number(effectiveWeeklyHours) > limit.maxWeekly) {
       throw new BadRequestException(
-        `La jornada '${effectiveJourneyType}' no puede superar ${limit.maxWeekly} horas semanales (Art. 173 LOTTT).`,
+        `La jornada '${derivedJourneyType}' no puede superar ${limit.maxWeekly} horas semanales (Art. 173 LOTTT).`,
       );
     }
 
@@ -51,10 +68,10 @@ export class ContractService {
       hours ?? null,
       base_salary ?? null,
       duties_type_id ?? null,
-      turn_type ?? null,
-      turn_id ?? null,
+      derivedTurnType,
+      effectiveTurnId,
       contract_id,
-      journey_type ?? null,
+      derivedJourneyType,
       weekly_hours ?? null,
     ]);
 
