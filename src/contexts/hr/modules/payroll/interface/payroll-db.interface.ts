@@ -44,3 +44,27 @@ export interface Incapacities {
   days_paying: number;
   percentage_to_pay: number;
 }
+
+/**
+ * Deduccion individual activa (hr_schema.employee_deduction, Arts. 152,
+ * 154, 412, 413) pendiente de aplicar en la planilla del periodo.
+ */
+export interface ActiveDeductionRow {
+  deduction_id: string;
+  employee_id: string;
+  kind: 'deuda_patrono' | 'sindical' | 'alimentaria' | 'otra';
+  installment_amount: string;
+  outstanding_balance: string;
+}
+
+/** Mapea employee_deduction.kind al code de hr_schema.payroll_concept
+ *  que absorbe su movimiento en la planilla mensual (ver seeds/catalog/hr/004). */
+export const DEDUCTION_KIND_CONCEPT_CODE: Record<
+  ActiveDeductionRow['kind'],
+  string
+> = {
+  deuda_patrono: 'DPAT',
+  sindical: 'SIND',
+  alimentaria: 'ALIM',
+  otra: 'OTRA',
+};

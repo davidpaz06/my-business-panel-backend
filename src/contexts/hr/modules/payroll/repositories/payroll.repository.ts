@@ -2,6 +2,7 @@ import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  ActiveDeductionRow,
   EmployeePayrollData,
   Incapacities,
   OvertimeSummary,
@@ -70,6 +71,16 @@ export class PayrollRepository {
           ? r.period_end.toISOString().split('T')[0]
           : String(r.period_end).split('T')[0],
     }));
+  }
+
+  /** Deducciones individuales activas de la sucursal (Arts. 152, 154, 412, 413). */
+  async getActiveDeductionsForBranch(
+    branchId: string,
+  ): Promise<ActiveDeductionRow[]> {
+    const res = await this.db.query(payroll.getActiveDeductionsForBranch, [
+      branchId,
+    ]);
+    return res.rows;
   }
 
   async getSuspentionInPeriod(periodStart: string, periodEnd: string) {

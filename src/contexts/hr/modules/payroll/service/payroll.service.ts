@@ -12,6 +12,8 @@ import { AccountingJournalService } from '@/contexts/finances/modules/accounting
 import { hrQueries } from '@hr/hr.queries';
 import { CreatePaysheetDto } from '../dto/create-paysheet.dto';
 import {
+  ActiveDeductionRow,
+  DEDUCTION_KIND_CONCEPT_CODE,
   EmployeePayrollData,
   Incapacities,
   PayrollConceptRow,
@@ -25,7 +27,7 @@ interface OvertimeTotals {
   feriadoWeightedHours: number;
 }
 
-const { payroll } = hrQueries;
+const { payroll, employeeDeduction } = hrQueries;
 
 @Injectable()
 export class PayrollService {
@@ -49,6 +51,18 @@ export class PayrollService {
     const concepts = await this.repo.getConceptsPerTenant(tenantId);
     const incomes = concepts.filter((c) => c.type === 'earning');
     const deductions = concepts.filter((c) => c.type === 'deduction');
+    // calculation_method 'manual' no tiene estrategia en StrategyContext
+    // a proposito (seed: "se ingresa al procesar") -- pasarlo por el
+    // motor generico revienta con "Strategy for method manual not found".
+    // Estos conceptos (Cuota sindical, Comisiones, y los nuevos DPAT/
+    // ALIM/OTRA) se resuelven fuera del motor: los de deduccion via
+    // empleado_deduction mas abajo, keyed por code en deductionConceptByCode.
+    const formulaIncomes = incomes.filter(
+      (c) => c.calculation_method !== 'manual',
+    );
+    const formulaDeductions = deductions.filter(
+      (c) => c.calculation_method !== 'manual',
+    );
 
     const incapacities = await this.repo.getIncapacities(
       branchId,
@@ -109,6 +123,20 @@ export class PayrollService {
       overtimeMap.set(row.employee_id, current);
     }
 
+    // Deducciones individuales activas (Arts. 152, 154, 412, 413) — se
+    // aplican por su installment_amount vigente, topado al saldo
+    // pendiente, y se descuentan de employee_deduction al cerrar la
+    // planilla (ver applyDeductionInstallments).
+    const activeDeductions =
+      await this.repo.getActiveDeductionsForBranch(branchId);
+    const deductionMap = new Map<string, ActiveDeductionRow[]>();
+    for (const row of activeDeductions) {
+      const list = deductionMap.get(row.employee_id) ?? [];
+      list.push(row);
+      deductionMap.set(row.employee_id, list);
+    }
+    const deductionConceptByCode = new Map(deductions.map((c) => [c.code, c]));
+
     for (const emp of employees) {
       const empOvertime = overtimeMap.get(emp.employee_id) || {
         nocturnaWeightedHours: 0,
@@ -130,13 +158,15 @@ export class PayrollService {
 
       await this.calculateAndSavePayroll(
         emp,
-        incomes,
-        deductions,
+        formulaIncomes,
+        formulaDeductions,
         paysheetId,
         empOvertime,
         incapacities,
         susDiscount,
         paymentMethodId,
+        deductionMap.get(emp.employee_id) ?? [],
+        deductionConceptByCode,
       );
     }
 
@@ -170,6 +200,8 @@ export class PayrollService {
     incapacities: Incapacities[],
     discount: number,
     paymentMethodId: number,
+    empDeductions: ActiveDeductionRow[],
+    deductionConceptByCode: Map<string | undefined, PayrollConceptRow>,
   ) {
     const incapacityInfo = incapacities.find(
       (i) => i.employee_id === emp.employee_id,
@@ -209,18 +241,77 @@ export class PayrollService {
       },
     );
 
+    // Deducciones individuales del empleado (Arts. 152, 154, 412, 413):
+    // no pasan por el motor de formulas -- el monto ya viene resuelto
+    // por registro (installment_amount, topado al saldo pendiente). Si
+    // el tenant no tiene el concepto de catalogo para ese kind
+    // (backfill pendiente, ver hr_schema.provision_tenant_payroll_concepts),
+    // se omite esa deduccion en vez de romper la planilla completa.
+    const individualDeductions: {
+      deduction_id: string;
+      appliedAmount: Decimal;
+      movement: {
+        concept_id: number;
+        name: string;
+        type: 'deduction';
+        calculated_amount: string;
+        appliedValue: string;
+        is_taxable: boolean;
+      };
+    }[] = [];
+
+    for (const row of empDeductions) {
+      const code = DEDUCTION_KIND_CONCEPT_CODE[row.kind];
+      const concept = deductionConceptByCode.get(code);
+      if (!concept) {
+        this.logger.warn(
+          `No payroll_concept with code ${code} for tenant of employee ${row.employee_id} ` +
+            `(deduction ${row.deduction_id}, kind ${row.kind}) -- omitida de la planilla, ` +
+            `requiere re-ejecutar provision_tenant_payroll_concepts.`,
+        );
+        continue;
+      }
+      const appliedAmount = Decimal.min(
+        new Decimal(row.installment_amount),
+        new Decimal(row.outstanding_balance),
+      );
+      if (appliedAmount.lte(0)) continue;
+
+      individualDeductions.push({
+        deduction_id: row.deduction_id,
+        appliedAmount,
+        movement: {
+          concept_id: concept.concept_id,
+          name: concept.name,
+          type: 'deduction',
+          calculated_amount: appliedAmount.toFixed(4),
+          appliedValue: appliedAmount.toFixed(4),
+          is_taxable: concept.is_taxable,
+        },
+      });
+    }
+
+    const individualDeductionsTotal = individualDeductions.reduce(
+      (acc, d) => acc.add(d.appliedAmount),
+      new Decimal(0),
+    );
+
     const allMovements = [
       ...incomeResult.movements,
       ...deductionResult.movements,
+      ...individualDeductions.map((d) => d.movement),
     ];
+    const totalDeductions = new Decimal(deductionResult.totals.deductions).add(
+      individualDeductionsTotal,
+    );
     const netSalary = new Decimal(incomeResult.totals.earnings).minus(
-      new Decimal(deductionResult.totals.deductions),
+      totalDeductions,
     );
 
     const allTotals = {
       grossSalary: incomeResult.totals.grossSalary,
       earnings: incomeResult.totals.earnings,
-      deductions: deductionResult.totals.deductions,
+      deductions: totalDeductions.toFixed(4),
       netSalary: netSalary.plus(emp.base_salary),
     };
 
@@ -246,6 +337,17 @@ export class PayrollService {
           mov.appliedValue.toString(), // base_amount: valor/factor de entrada
           mov.calculated_amount.toString(), // calculated_amount: resultado monetario
           mov.name,
+        ]);
+      }
+
+      // Descuenta lo aplicado del saldo pendiente de cada deduccion
+      // individual -- misma mecanica que deductions.service.ts#applyPayment,
+      // ejecutada aqui dentro de la misma transaccion para que un
+      // rollback de la planilla tambien revierta el saldo.
+      for (const d of individualDeductions) {
+        await txn.query(employeeDeduction.applyPayment, [
+          d.appliedAmount.toFixed(4),
+          d.deduction_id,
         ]);
       }
 

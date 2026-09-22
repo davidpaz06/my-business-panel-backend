@@ -442,6 +442,21 @@ export const hrQueryDefs = {
       WHERE is_active = true
       AND (suspention_start, suspention_end) OVERLAPS ($1, $2)
     `,
+    /**
+     * Deducciones individuales activas por sucursal (Arts. 152, 154, 412,
+     * 413), para aplicarlas por planilla mensual. installment_amount
+     * IS NOT NULL descarta registros que solo tienen total_amount (sin
+     * cuota periodica definida, ej. compensacion unica en liquidacion).
+     */
+    getActiveDeductionsForBranch: `
+      SELECT ed.deduction_id, ed.employee_id, ed.kind, ed.installment_amount, ed.outstanding_balance
+      FROM hr_schema.employee_deduction ed
+      INNER JOIN hr_schema.employee e USING(employee_id)
+      WHERE e.branch_id = $1
+        AND ed.is_active = true
+        AND ed.outstanding_balance > 0
+        AND ed.installment_amount IS NOT NULL
+    `,
   },
 
   payrollMovement: {
@@ -1199,9 +1214,10 @@ export const hrQueryDefs = {
     `,
     applyPayment: `
       UPDATE hr_schema.employee_deduction
-      SET outstanding_balance = outstanding_balance - $1
+      SET outstanding_balance = outstanding_balance - $1,
+          is_active = (outstanding_balance - $1 > 0)
       WHERE deduction_id = $2
-      RETURNING deduction_id, outstanding_balance
+      RETURNING deduction_id, outstanding_balance, is_active
     `,
     listOutstandingByEmployee: `
       SELECT deduction_id, kind, outstanding_balance
