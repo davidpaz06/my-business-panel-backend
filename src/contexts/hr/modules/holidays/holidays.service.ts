@@ -64,7 +64,9 @@ export class HolidaysService {
 
   async create(tenantId: string, dto: CreateHolidayDto) {
     if (dto.source !== 'ley') {
-      const year = dto.holiday_year ?? new Date(dto.date).getFullYear();
+      // dto.date llega como 'YYYY-MM-DD': tomar el anio del texto evita
+      // que la zona horaria del servidor corra la fecha un dia.
+      const year = dto.holiday_year ?? Number(dto.date.slice(0, 4));
       const countResult = await this.db.query(holidayLottt.countDeclared, [
         year,
         tenantId,

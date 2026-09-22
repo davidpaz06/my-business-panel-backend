@@ -67,6 +67,14 @@ export class ProfitSharingPeriodService {
     return this.assertOwnership(periodId, tenantId);
   }
 
+  /** Ejercicios del tenant, del mas reciente al mas viejo. */
+  async listByTenant(tenantId: string) {
+    const result = await this.db.query(profitSharingPeriod.listByTenant, [
+      tenantId,
+    ]);
+    return result.rows;
+  }
+
   async getByYear(tenantId: string, year: number) {
     const result = await this.db.query(profitSharingPeriod.getByYear, [
       tenantId,

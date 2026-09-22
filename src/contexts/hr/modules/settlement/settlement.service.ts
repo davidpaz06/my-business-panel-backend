@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -118,11 +117,16 @@ export class SettlementService {
       );
     }
 
-    // Vacaciones y bono (causadas o fraccion segun antiguedad).
-    const { totalMonths, completeYears, remainderMonths } = this.monthsAndYears(
+    // Vacaciones y bono. Son CUATRO conceptos distintos y pueden
+    // coexistir: los anios ya cumplidos se pagan como causados
+    // (Arts. 195 y 192) y los meses del anio en curso como fraccion
+    // (Art. 196). Antes solo se emitia uno de los dos bloques y el
+    // bono causado no se liquidaba nunca.
+    const { completeYears, remainderMonths } = this.monthsAndYears(
       hireDate,
       endDate,
     );
+
     if (completeYears >= 1) {
       const pending = await this.vacationPeriods.pendingValue(
         tenantId,
@@ -141,22 +145,55 @@ export class SettlementService {
           ),
         );
       }
-    } else {
-      const fraction = this.vacations.fraction(hireDate, endDate);
-      if (fraction.totalDays > 0) {
-        const normalDaily = await this.salaryService.getNormalDaily(
-          employeeId,
-          tenantId,
-          endDate,
+
+      const pendingBonus = await this.vacationPeriods.pendingBonusValue(
+        tenantId,
+        employeeId,
+        endDate,
+      );
+      if (Number(pendingBonus.totalPendingBonusDays) > 0) {
+        items.push(
+          this.draft(
+            'HR-VE-12',
+            'Bono vacacional causado no pagado',
+            '192',
+            'normal',
+            new Decimal(pendingBonus.amount),
+            sortOrder++,
+          ),
         );
-        const amount = normalDaily.mul(fraction.totalDays);
+      }
+    }
+
+    // Fraccion del anio en curso (Art. 196), tenga o no anios cumplidos.
+    if (remainderMonths > 0) {
+      const fraction = this.vacations.fraction(hireDate, endDate);
+      const normalDaily = await this.salaryService.getNormalDaily(
+        employeeId,
+        tenantId,
+        endDate,
+      );
+
+      if (fraction.vacationFraction > 0) {
         items.push(
           this.draft(
             'HR-VE-13',
-            'Vacaciones y bono vacacional fraccionados',
+            'Vacaciones fraccionadas',
             '196',
             'normal',
-            amount,
+            normalDaily.mul(fraction.vacationFraction),
+            sortOrder++,
+          ),
+        );
+      }
+      if (fraction.bonusFraction > 0) {
+        items.push(
+          this.draft(
+            'HR-VE-13',
+            'Bono vacacional fraccionado',
+            '196',
+            'normal',
+            normalDaily.mul(fraction.bonusFraction),
             sortOrder++,
           ),
         );

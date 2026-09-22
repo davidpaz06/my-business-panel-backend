@@ -165,9 +165,11 @@ export const hrQueryDefs = {
     `,
     terminate: `
       UPDATE hr_schema.employee
-      SET termination_date = $1, termination_type = $2, termination_reason = $3
-      WHERE employee_id = $4
-      RETURNING employee_id, tenant_id, hire_date::text AS hire_date, termination_date::text AS termination_date, termination_type, termination_reason
+      SET termination_date = $1, termination_type = $2, termination_reason = $3,
+          is_active = ($1::DATE > CURRENT_DATE)
+      WHERE employee_id = $4 AND tenant_id = $5
+      RETURNING employee_id, tenant_id, hire_date::text AS hire_date, termination_date::text AS termination_date,
+        termination_type, termination_reason, is_active
     `,
     listActiveForTenant: `
       SELECT employee_id, hire_date::text AS hire_date
@@ -935,9 +937,16 @@ export const hrQueryDefs = {
       WHERE vacation_period_id = $1 LIMIT 1
     `,
     listPending: `
-      SELECT vacation_period_id, employee_id, service_year, days_earned, days_taken, status
+      SELECT vacation_period_id, employee_id, service_year, days_earned, days_taken,
+        bonus_days_earned, bonus_paid_amount, status
       FROM hr_schema.vacation_period
       WHERE employee_id = $1 AND status IN ('causado', 'disfrutado')
+      ORDER BY service_year ASC
+    `,
+    listBonusPending: `
+      SELECT vacation_period_id, employee_id, service_year, bonus_days_earned, status
+      FROM hr_schema.vacation_period
+      WHERE employee_id = $1 AND bonus_paid_amount IS NULL AND status <> 'pagado'
       ORDER BY service_year ASC
     `,
     enjoy: `
@@ -977,6 +986,14 @@ export const hrQueryDefs = {
         is_non_profit, status, closed_at, payment_deadline::text AS payment_deadline
       FROM hr_schema.profit_sharing_period
       WHERE tenant_id = $1 AND fiscal_year = $2 LIMIT 1
+    `,
+    listByTenant: `
+      SELECT profit_period_id, tenant_id, fiscal_year, fiscal_year_start::text AS fiscal_year_start, fiscal_year_end::text AS fiscal_year_end,
+        liquid_benefits, distribution_percentage, distributable_amount, total_earned_salaries,
+        is_non_profit, status, closed_at, payment_deadline::text AS payment_deadline
+      FROM hr_schema.profit_sharing_period
+      WHERE tenant_id = $1
+      ORDER BY fiscal_year DESC
     `,
     setLiquidBenefits: `
       UPDATE hr_schema.profit_sharing_period
@@ -1114,14 +1131,15 @@ export const hrQueryDefs = {
     `,
     listByEmployee: `
       SELECT beneficiary_id, employee_id, full_name, doc_number, relationship, claim_date,
-        validated, validated_at, share_percentage, share_amount
+        validated, validated_at, share_percentage, share_amount, settlement_id
       FROM hr_schema.employee_beneficiary
-      WHERE employee_id = $1
+      WHERE employee_id = $1 AND tenant_id = $2
+        AND ($3::BOOLEAN IS NULL OR validated = $3::BOOLEAN)
       ORDER BY claim_date ASC
     `,
     listValidatedByEmployee: `
       SELECT beneficiary_id FROM hr_schema.employee_beneficiary
-      WHERE employee_id = $1 AND validated = true
+      WHERE employee_id = $1 AND tenant_id = $2 AND validated = true
     `,
     getById: `
       SELECT beneficiary_id, employee_id, tenant_id, full_name, doc_number, relationship, claim_date, validated
@@ -1131,13 +1149,13 @@ export const hrQueryDefs = {
     validate: `
       UPDATE hr_schema.employee_beneficiary
       SET validated = true, validated_at = $1
-      WHERE beneficiary_id = $2
+      WHERE beneficiary_id = $2 AND tenant_id = $3
       RETURNING beneficiary_id, validated, validated_at
     `,
     updateShare: `
       UPDATE hr_schema.employee_beneficiary
       SET share_percentage = $1, share_amount = $2, settlement_id = $3
-      WHERE beneficiary_id = $4
+      WHERE beneficiary_id = $4 AND tenant_id = $5
     `,
   },
 

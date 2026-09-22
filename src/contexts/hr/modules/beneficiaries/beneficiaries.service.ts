@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -41,16 +42,25 @@ export class BeneficiariesService {
       }
     }
 
-    const result = await this.db.query(employeeBeneficiary.create, [
-      dto.employee_id,
-      tenantId,
-      dto.full_name,
-      dto.doc_number,
-      dto.relationship,
-      dto.claim_date,
-    ]);
+    try {
+      const result = await this.db.query(employeeBeneficiary.create, [
+        dto.employee_id,
+        tenantId,
+        dto.full_name,
+        dto.doc_number,
+        dto.relationship,
+        dto.claim_date,
+      ]);
 
-    return result.rows[0];
+      return result.rows[0];
+    } catch (error) {
+      if ((error as { code?: string })?.code === '23505') {
+        throw new ConflictException(
+          `Ya existe un reclamante con el documento ${dto.doc_number} para este trabajador (Art. 145).`,
+        );
+      }
+      throw error;
+    }
   }
 
   async validate(
@@ -62,6 +72,7 @@ export class BeneficiariesService {
     const result = await this.db.query(employeeBeneficiary.validate, [
       dto.validated_at,
       beneficiaryId,
+      tenantId,
     ]);
     return result.rows[0];
   }
@@ -70,6 +81,8 @@ export class BeneficiariesService {
     const emp = await this.getEmployeeTermination(employeeId, tenantId);
     const list = await this.db.query(employeeBeneficiary.listByEmployee, [
       employeeId,
+      tenantId,
+      null,
     ]);
 
     const deadline = emp.termination_date
@@ -77,8 +90,10 @@ export class BeneficiariesService {
       : null;
 
     return {
+      terminationDate: emp.termination_date ?? null,
       deadline,
       open: deadline ? new Date().toISOString().slice(0, 10) <= deadline : true,
+      totalClaimants: list.rows.length,
       validatedClaimants: list.rows.filter((r) => r.validated).length,
       pendingClaimants: list.rows.filter((r) => !r.validated).length,
       article: '145',
@@ -91,14 +106,30 @@ export class BeneficiariesService {
     employeeId: string,
     dto: DistributeSettlementDto,
   ) {
+    await this.getEmployeeTermination(employeeId, tenantId);
+
     const validated = await this.db.query(
       employeeBeneficiary.listValidatedByEmployee,
-      [employeeId],
+      [employeeId, tenantId],
     );
 
     if (!validated.rows.length) {
       throw new BadRequestException(
         'No hay reclamantes validados para repartir (Art. 145).',
+      );
+    }
+
+    const alreadyDistributed = await this.db.query(
+      employeeBeneficiary.listByEmployee,
+      [employeeId, tenantId, null],
+    );
+    const hasShares = alreadyDistributed.rows.some(
+      (r) =>
+        r.settlement_id === dto.settlement_id && r.share_percentage !== null,
+    );
+    if (hasShares && dto.recalculate !== true) {
+      throw new ConflictException(
+        'Esta liquidacion ya fue repartida. Enviar recalculate = true para redistribuir entre los reclamantes validados actuales (Art. 145).',
       );
     }
 
@@ -121,30 +152,40 @@ export class BeneficiariesService {
     const sharePercentage = new Decimal(100).div(count);
     const shareAmount = total.div(count);
 
-    for (const row of validated.rows) {
+    // El residuo de la division (centimos) se acumula en el ultimo reclamante
+    // para que la suma de las cuotas cuadre exactamente con el total liquidado.
+    const roundedShare = shareAmount.toDecimalPlaces(2, Decimal.ROUND_DOWN);
+    const remainder = total.minus(roundedShare.mul(count));
+
+    for (const [index, row] of validated.rows.entries()) {
+      const isLast = index === count - 1;
+      const amount = isLast ? roundedShare.plus(remainder) : roundedShare;
       await this.db.query(employeeBeneficiary.updateShare, [
         sharePercentage.toFixed(4),
-        shareAmount.toFixed(4),
+        amount.toFixed(4),
         dto.settlement_id,
         row.beneficiary_id,
+        tenantId,
       ]);
     }
 
     return {
       count,
       sharePercentage: sharePercentage.toFixed(4),
-      shareAmount: shareAmount.toFixed(4),
+      shareAmount: roundedShare.toFixed(4),
+      remainder: remainder.toFixed(4),
       total: total.toFixed(4),
       article: '145',
     };
   }
 
-  async list(employeeId: string, onlyValidated?: boolean) {
+  async list(tenantId: string, employeeId: string, onlyValidated?: boolean) {
     const result = await this.db.query(employeeBeneficiary.listByEmployee, [
       employeeId,
+      tenantId,
+      onlyValidated === undefined ? null : onlyValidated,
     ]);
-    if (onlyValidated === undefined) return result.rows;
-    return result.rows.filter((r) => r.validated === onlyValidated);
+    return result.rows;
   }
 
   private async assertOwnership(beneficiaryId: string, tenantId: string) {

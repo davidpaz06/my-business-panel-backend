@@ -93,6 +93,11 @@ export class ProfitSharingController {
     return this.periods.preview(user.tenant_id, id, hireDate);
   }
 
+  @Get('periods')
+  listPeriods(@Session() user: IUserSession) {
+    return this.periods.listByTenant(user.tenant_id);
+  }
+
   @Get('periods/:id')
   getPeriod(@Param('id') id: string, @Session() user: IUserSession) {
     return this.periods.getById(user.tenant_id, id);

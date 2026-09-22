@@ -62,6 +62,7 @@ export class BeneficiariesController {
     @Session() user: IUserSession,
   ) {
     return this.service.list(
+      user.tenant_id,
       employeeId,
       onlyValidated === undefined ? undefined : onlyValidated === 'true',
     );

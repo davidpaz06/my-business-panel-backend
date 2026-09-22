@@ -18,6 +18,8 @@ import {
   UpdateTerminationDto,
 } from './dto/terminateEmployee.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
 import {
   getEmployeesByTenantDoc,
   getEmployeeByIdDoc,
@@ -100,16 +102,18 @@ export class EmployeeController {
   async terminateEmployee(
     @Param('id') id: string,
     @Body() data: TerminateEmployeeDto,
+    @Session() user: IUserSession,
   ) {
-    return this.employeeService.terminate(id, data);
+    return this.employeeService.terminate(id, user.tenant_id, data);
   }
 
   @Patch(':id/termination')
   async updateTermination(
     @Param('id') id: string,
     @Body() data: UpdateTerminationDto,
+    @Session() user: IUserSession,
   ) {
-    return this.employeeService.updateTermination(id, data);
+    return this.employeeService.updateTermination(id, user.tenant_id, data);
   }
 
   @ApiOperation(deactivateEmployeeDoc.operation)

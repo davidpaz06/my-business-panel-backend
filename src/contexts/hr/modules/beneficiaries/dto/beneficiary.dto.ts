@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsOptional,
@@ -40,5 +41,6 @@ export class DistributeSettlementDto {
   settlement_id!: string;
 
   @IsOptional()
+  @IsBoolean()
   recalculate?: boolean;
 }

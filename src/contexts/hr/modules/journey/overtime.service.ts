@@ -126,7 +126,15 @@ export class OvertimeService {
     const yearlyMax = 100;
 
     const base = {
-      daily: { used: emp.dailyHours + acc.dailyExtra, max: dailyMax },
+      // Art. 178: el tope de 10h/dia es JORNADA ORDINARIA + EXTRA sumadas,
+      // no solo horas extra. Se expone el desglose para que la UI no
+      // presente "used" como si fueran puras horas extra.
+      daily: {
+        used: emp.dailyHours + acc.dailyExtra,
+        max: dailyMax,
+        ordinaryHours: emp.dailyHours,
+        extraHours: acc.dailyExtra,
+      },
       weekly: { used: acc.weeklyExtra, max: weeklyMax },
       yearly: { used: acc.yearlyExtra, max: yearlyMax },
     };

@@ -113,7 +113,8 @@ export class ParametersService {
 
     return result.rows.map((r) => ({
       value: new Decimal(r.param_value),
-      validFrom: new Date(r.valid_from).toISOString().slice(0, 10),
+      // valid_from es DATE: llega como 'YYYY-MM-DD' (ver db.provider).
+      validFrom: String(r.valid_from).slice(0, 10),
     }));
   }
 }

@@ -39,6 +39,33 @@ export class TenantService {
     };
   }
 
+  /**
+   * Provisiona la configuracion de RRHH que un tenant necesita para
+   * operar desde el dia uno: conceptos de nomina y pisos legales de la
+   * LOTTT (Arts. 117, 118, 120, 131, 142, 154, 178, 190, 192).
+   *
+   * Sin esto, un tenant creado despues del bootstrap arranca con
+   * hr_schema.payroll_parameters vacio y el primer calculo que necesite
+   * un piso legal falla con 404 sin explicar que falta configurarlo.
+   *
+   * salario_minimo_nacional (Art. 129) y tasa_activa_bcv (Arts. 128,
+   * 142.f, 143) quedan fuera a proposito: dependen de un decreto del
+   * Ejecutivo y de un aviso del BCV, y se cargan por tenant.
+   */
+  private async provisionHrDefaults(
+    txn: TransactionClient,
+    tenantId: string,
+  ): Promise<void> {
+    await txn.rawQuery(
+      'SELECT hr_schema.provision_tenant_payroll_concepts($1)',
+      [tenantId],
+    );
+    await txn.rawQuery(
+      'SELECT hr_schema.provision_tenant_payroll_parameters($1)',
+      [tenantId],
+    );
+  }
+
   private async rollbackSafely(
     txn: TransactionClient,
     context: string,
@@ -122,6 +149,8 @@ export class TenantService {
         identification_type_id,
       ]);
 
+      await this.provisionHrDefaults(txn, rows[0].tenant_id);
+
       await txn.commit();
       committed = true;
       this.stateService.addTenant(rows[0]);
@@ -170,6 +199,8 @@ export class TenantService {
       ]);
       const newTenant = tenantRows[0];
       const tenantId: string = newTenant.tenant_id;
+
+      await this.provisionHrDefaults(txn, tenantId);
 
       // ── 2. Crear sucursal principal ───────────────────────────────────────
       const branchName =

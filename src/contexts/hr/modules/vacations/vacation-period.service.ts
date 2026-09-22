@@ -228,6 +228,51 @@ export class VacationPeriodService {
     return explain ? { ...base, periods } : base;
   }
 
+  /**
+   * Bono vacacional causado y NO pagado (Art. 192). Es un concepto
+   * DISTINTO de las vacaciones: un periodo puede tener el disfrute ya
+   * pagado y el bono todavia pendiente, por eso se rastrea por
+   * bonus_paid_amount y no por days_taken. Se valora al salario normal
+   * de la terminacion, igual que el Art. 195.
+   */
+  async pendingBonusValue(
+    tenantId: string,
+    employeeId: string,
+    endDate: string,
+    explain = false,
+  ) {
+    await this.getHireDate(employeeId, tenantId);
+    const pending = await this.db.query(vacationPeriod.listBonusPending, [
+      employeeId,
+    ]);
+    const terminationSalary = await this.salaryHistory.resolve(
+      employeeId,
+      endDate,
+    );
+    const dailySalary = terminationSalary.div(30);
+
+    let totalDays = new Decimal(0);
+    const periods = pending.rows.map((p) => {
+      totalDays = totalDays.add(new Decimal(p.bonus_days_earned));
+      return {
+        serviceYear: p.service_year,
+        bonusDaysEarned: p.bonus_days_earned,
+      };
+    });
+
+    const base = {
+      employeeId,
+      endDate,
+      totalPendingBonusDays: totalDays.toFixed(2),
+      dailySalary: dailySalary.toFixed(4),
+      amount: dailySalary.mul(totalDays).toFixed(4),
+      article: '192',
+      salaryBasis: 'normal',
+    };
+
+    return explain ? { ...base, periods } : base;
+  }
+
   private lastDayOfPriorMonth(date: string): string {
     const d = new Date(`${date}T00:00:00Z`);
     d.setUTCDate(0); // ultimo dia del mes anterior

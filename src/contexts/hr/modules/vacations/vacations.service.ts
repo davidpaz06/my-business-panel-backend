@@ -91,25 +91,33 @@ export class VacationsService {
   }
 
   /**
-   * Fraccion por terminacion antes de cumplir el anio (Art. 196).
-   * Solo cuentan los MESES COMPLETOS; vacaciones y bono se
-   * prorratean con el mismo divisor.
+   * Fraccion del anio EN CURSO (Art. 196): vacaciones y bono en
+   * proporcion a los meses completos servidos dentro de ese anio.
+   *
+   * La base son los dias que corresponderian al anio en curso — el
+   * "anio siguiente" del Art. 196 — no siempre los del anio 1: para
+   * quien lleva 7 anios cumplidos, el anio en curso es el 8 y la base
+   * escala segun los Arts. 190/192. Solo cuentan los MESES COMPLETOS
+   * de ese anio; vacaciones y bono usan el mismo divisor.
    */
   fraction(hireDate: string, endDate: string, explain = false) {
-    const { totalMonths } = monthsBetween(
+    const { completeYears, remainderMonths } = monthsBetween(
       new Date(`${hireDate}T00:00:00Z`),
       new Date(`${endDate}T00:00:00Z`),
     );
 
-    // "Anio siguiente" para quien aun no cumple el primero es el anio 1.
-    const vacDaysYear1 = vacationDays(1);
-    const bonusDaysYear1 = bonusVacationDays(1);
+    // Anio de servicio en curso: los cumplidos ya se pagan como
+    // periodos causados (Arts. 190, 195), aparte de esta fraccion.
+    const serviceYearInProgress = completeYears + 1;
+    const vacDaysBase = vacationDays(serviceYearInProgress);
+    const bonusDaysBase = bonusVacationDays(serviceYearInProgress);
 
-    const vacationFraction = (vacDaysYear1 * totalMonths) / 12;
-    const bonusFraction = (bonusDaysYear1 * totalMonths) / 12;
+    const vacationFraction = (vacDaysBase * remainderMonths) / 12;
+    const bonusFraction = (bonusDaysBase * remainderMonths) / 12;
 
     const base = {
-      completeMonths: totalMonths,
+      completeMonths: remainderMonths,
+      serviceYearInProgress,
       vacationFraction: Number(vacationFraction.toFixed(2)),
       bonusFraction: Number(bonusFraction.toFixed(2)),
       totalDays: Number((vacationFraction + bonusFraction).toFixed(2)),
@@ -117,7 +125,7 @@ export class VacationsService {
     };
 
     return explain
-      ? { ...base, divisor: 12, vacDaysYear1, bonusDaysYear1 }
+      ? { ...base, divisor: 12, vacDaysBase, bonusDaysBase }
       : base;
   }
 
@@ -138,16 +146,10 @@ export class VacationsService {
     }
 
     const hireDate = result.rows[0].hire_date as string;
-    const lastAnniversaryYears = causedPeriods.length;
-    const currentPeriodStart = new Date(`${hireDate}T00:00:00Z`);
-    currentPeriodStart.setUTCFullYear(
-      currentPeriodStart.getUTCFullYear() + lastAnniversaryYears,
-    );
 
-    const fractionResult = this.fraction(
-      currentPeriodStart.toISOString().slice(0, 10),
-      endDate,
-    );
+    // fraction() ya aisla el anio en curso a partir del ingreso real
+    // (anios cumplidos -> periodos causados; meses restantes -> Art. 196).
+    const fractionResult = this.fraction(hireDate, endDate);
 
     return {
       causedPeriods,

@@ -1,10 +1,24 @@
 import Database, { DatabaseConfig } from '@crane-technologies/database';
+import { types as pgTypes } from 'pg';
 import { queries } from '@/queries';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
 export const DATABASE = 'DATABASE';
+
+/**
+ * OID 1082 = DATE. Por defecto node-postgres convierte una columna DATE
+ * en un objeto Date de JS a medianoche LOCAL del proceso; al serializar
+ * la respuesta a JSON (toISOString) el valor se corre hacia atras tantas
+ * horas como tenga de offset la zona del servidor, y una fecha sin hora
+ * termina mostrandose un dia antes en el cliente.
+ *
+ * Una fecha de calendario (ingreso, egreso, vigencia, feriado) no tiene
+ * zona horaria: se devuelve tal cual la guarda Postgres, 'YYYY-MM-DD'.
+ * Los TIMESTAMP (OID 1114/1184) si conservan su parseo normal.
+ */
+pgTypes.setTypeParser(pgTypes.builtins.DATE, (value: string) => value);
 
 let db: Database | null = null;
 
