@@ -865,6 +865,82 @@ export const posQueryDefs = {
       RETURNING loyalty_program_id
     `,
   },
+
+  creditDebitNote: {
+    // Contexto de la factura + saldo pendiente (si tiene AR) para validar
+    // que un credito no exceda lo que aun se debe.
+    getInvoiceContext: `
+      SELECT
+        i.invoice_id,
+        i.total_amount,
+        i.tenant_customer_id,
+        s.sale_id,
+        s.branch_id,
+        b.tenant_id,
+        sar.sale_account_receivable_id,
+        ar.account_receivable_id,
+        ar.subtotal,
+        COALESCE(sar.tax_amount, 0) AS ar_tax_amount,
+        ar.amount_paid
+      FROM pos_schema.invoice i
+      JOIN pos_schema.sale s ON s.sale_id = i.sale_id
+      JOIN general_schema.branch b ON b.branch_id = s.branch_id
+      LEFT JOIN pos_schema.sale_account_receivable sar ON sar.sale_id = s.sale_id
+      LEFT JOIN general_schema.account_receivable ar ON ar.account_receivable_id = sar.account_receivable_id
+      WHERE i.invoice_id = $1
+      LIMIT 1
+    `,
+    // Notas activas (no anuladas) de una factura, para calcular el saldo
+    // neto ya ajustado antes de aceptar una nueva.
+    sumActiveByInvoice: `
+      SELECT
+        COALESCE(SUM(amount) FILTER (WHERE note_type = 'credit'), 0) AS total_credit,
+        COALESCE(SUM(amount) FILTER (WHERE note_type = 'debit'), 0) AS total_debit
+      FROM pos_schema.credit_debit_note
+      WHERE invoice_id = $1 AND is_voided = FALSE
+    `,
+    create: `
+      INSERT INTO pos_schema.credit_debit_note
+        (tenant_id, invoice_id, note_type, reason_kind, description, amount, currency_id, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING note_id, note_number, tenant_id, invoice_id, note_type, reason_kind,
+        description, amount, currency_id, is_voided, created_at
+    `,
+    listByInvoice: `
+      SELECT note_id, note_number, invoice_id, note_type, reason_kind, description,
+        amount, currency_id, is_voided, voided_at, created_by, created_at
+      FROM pos_schema.credit_debit_note
+      WHERE invoice_id = $1
+      ORDER BY created_at DESC
+    `,
+    listByTenant: `
+      SELECT
+        cdn.note_id, cdn.note_number, cdn.invoice_id, cdn.note_type, cdn.reason_kind,
+        cdn.description, cdn.amount, cdn.currency_id, cdn.is_voided, cdn.voided_at,
+        cdn.created_at,
+        s.sale_id,
+        (tc.first_name || ' ' || tc.last_name) AS customer_name
+      FROM pos_schema.credit_debit_note cdn
+      JOIN pos_schema.invoice i ON i.invoice_id = cdn.invoice_id
+      JOIN pos_schema.sale s ON s.sale_id = i.sale_id
+      LEFT JOIN general_schema.tenant_customer tc ON tc.tenant_customer_id = i.tenant_customer_id
+      WHERE cdn.tenant_id = $1
+      ORDER BY cdn.created_at DESC
+    `,
+    getById: `
+      SELECT note_id, tenant_id, invoice_id, note_type, amount, is_voided
+      FROM pos_schema.credit_debit_note
+      WHERE note_id = $1
+      LIMIT 1
+    `,
+    void: `
+      UPDATE pos_schema.credit_debit_note
+      SET is_voided = TRUE, voided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE note_id = $1 AND is_voided = FALSE
+      RETURNING note_id, note_number, tenant_id, invoice_id, note_type, reason_kind,
+        description, amount, currency_id, is_voided, voided_at, created_by, created_at
+    `,
+  },
 };
 
 export const posQueries = createQueries(posQueryDefs);

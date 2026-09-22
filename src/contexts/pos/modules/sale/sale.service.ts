@@ -92,9 +92,14 @@ export class SaleService {
     const arBalance = totalSale - upfront;
     const isCredit = data.sale_condition === '02';
     const isApartado = data.sale_condition === '04';
-    // Credit sale with outstanding balance is not "completed" until fully paid.
+    // Credit sale or apartado (layaway) with outstanding balance is not
+    // "completed" until fully paid -- apartado was missing here (bug found
+    // in the VE credit-sale audit): a layaway with balance > 0 could be
+    // flagged is_completed = true, contradicting its own semantics
+    // (merchandise reserved, not released until paid) and polluting any
+    // report/dashboard that filters on sale.is_completed as "realized sale".
     const effectiveIsCompleted =
-      data.is_completed && !(isCredit && arBalance > 0.01);
+      data.is_completed && !((isCredit || isApartado) && arBalance > 0.01);
 
     const txn = await this.db.transaction();
     try {

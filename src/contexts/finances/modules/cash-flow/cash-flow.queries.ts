@@ -163,7 +163,12 @@ export const cashFlowAvailableQuery = `
 export const cashFlowProjectionsQuery = `
   SELECT
     ar.due_date::timestamp                AS projection_date,
-    ar.balance_remaining                  AS amount,
+    -- ar.balance_remaining (GENERATED subtotal - amount_paid) no incluye el
+    -- impuesto, que vive aparte en sale_account_receivable.tax_amount --
+    -- subestimaba la proyeccion de cobro en el monto del IVA de cada venta
+    -- a credito pendiente. Recalculado igual que el listado de Cuentas por
+    -- Cobrar (accounts-receivable.queries.ts) y check_account_receivable_completion().
+    GREATEST((ar.subtotal + COALESCE(sar.tax_amount, 0)) - ar.amount_paid, 0) AS amount,
     1                                     AS currency_id,
     'entrada'::text                       AS direction,
     'cuentas_por_cobrar'::text            AS movement_type,
@@ -172,18 +177,22 @@ export const cashFlowProjectionsQuery = `
       'Cliente no registrado'
     )                                     AS description
   FROM general_schema.account_receivable ar
+  JOIN pos_schema.sale_account_receivable sar
+    ON sar.account_receivable_id = ar.account_receivable_id
   LEFT JOIN general_schema.tenant_customer tc
     ON tc.tenant_customer_id = ar.tenant_customer_id
   WHERE ar.tenant_id = $1
     AND ar.is_paid = FALSE
-    AND ar.balance_remaining > 0
+    AND (ar.subtotal + COALESCE(sar.tax_amount, 0)) - ar.amount_paid > 0
     AND ar.due_date > CURRENT_DATE
 
   UNION ALL
 
   SELECT
     ap.due_date::timestamp                AS projection_date,
-    ap.balance_remaining                  AS amount,
+    -- Mismo bug, lado cuentas por pagar: el IVA vive en
+    -- purchase_account_payable.tax_amount, no en account_payable.subtotal.
+    GREATEST((ap.subtotal + COALESCE(pap.tax_amount, 0)) - ap.amount_paid, 0) AS amount,
     1                                     AS currency_id,
     'salida'::text                        AS direction,
     'cuentas_por_pagar'::text             AS movement_type,
@@ -201,7 +210,7 @@ export const cashFlowProjectionsQuery = `
     ON s.supplier_id = po.supplier_id
   WHERE b.tenant_id = $1
     AND ap.is_paid = FALSE
-    AND ap.balance_remaining > 0
+    AND (ap.subtotal + COALESCE(pap.tax_amount, 0)) - ap.amount_paid > 0
     AND ap.due_date > CURRENT_DATE
 
   UNION ALL

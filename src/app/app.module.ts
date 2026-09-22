@@ -39,6 +39,7 @@ import { SaleItemModule } from '@/contexts/pos/modules/sale-item/sale-item.modul
 import { InvoiceModule } from '@/contexts/pos/modules/invoice/invoice.module';
 import { PromosModule } from '@/contexts/pos/modules/promos/promos.module';
 import { ReturnsModule } from '@/contexts/pos/modules/returns/returns.module';
+import { CreditDebitNoteModule } from '@/contexts/pos/modules/credit-debit-note/credit-debit-note.module';
 import { CashRegisterModule } from '@/contexts/pos/modules/cash_register/cash_register.module';
 import { LoyalProgramModule } from '@/contexts/pos/modules/loyal-program/loyalty-program.module';
 import { PosExpenseModule } from '@/contexts/pos/modules/pos-expense/pos-expense.module';
@@ -120,6 +121,7 @@ import { IvaModule } from '@/contexts/finances/modules/iva/iva.module';
     PromosModule,
     SegmentModule,
     ReturnsModule,
+    CreditDebitNoteModule,
     BranchModule,
     CashRegisterModule,
     LoyalProgramModule,
