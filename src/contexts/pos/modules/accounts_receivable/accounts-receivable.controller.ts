@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -27,8 +28,16 @@ export class AccountsReceivableController {
 
   @ApiOperation({ summary: 'Listar cuentas por cobrar' })
   @Get()
-  findAll(@Session() session: IUserSession) {
-    return this.accountsReceivableService.getAccountsReceivable(session);
+  findAll(
+    @Session() session: IUserSession,
+    @Query('page') page = '1',
+    @Query('limit') limit = '50',
+  ) {
+    return this.accountsReceivableService.getAccountsReceivable(
+      session,
+      parseInt(page),
+      parseInt(limit),
+    );
   }
 
   @ApiOperation({ summary: 'Obtener catálogos para el módulo CxC' })

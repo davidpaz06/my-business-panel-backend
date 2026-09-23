@@ -1,9 +1,13 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
 export class SaleCreationError extends HttpException {
-  constructor() {
+  constructor(detail?: string) {
     super(
-      { message: 'Error Creating the Sale. Please Check the Request' },
+      {
+        message: detail
+          ? `Error Creating the Sale: ${detail}`
+          : 'Error Creating the Sale. Please Check the Request',
+      },
       HttpStatus.UNPROCESSABLE_ENTITY,
     );
 

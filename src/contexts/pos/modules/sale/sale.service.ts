@@ -457,10 +457,9 @@ export class SaleService {
       return { saleId };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      this.logger.error(
-        `Error creating full sale: ${(error as Error).message}`,
-      );
-      throw new SaleCreationError();
+      const message = (error as Error).message;
+      this.logger.error(`Error creating full sale: ${message}`);
+      throw new SaleCreationError(message);
     }
   }
 

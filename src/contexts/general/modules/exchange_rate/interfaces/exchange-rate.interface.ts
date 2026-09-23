@@ -20,3 +20,10 @@ export interface ExchangeRateLedgerEntry {
   effective_rate: string;
   created_at: string;
 }
+
+/** Respuesta de https://ve.dolarapi.com/v1/dolares/oficial (tasa BCV). */
+export interface DolarApiOficialResponse {
+  fuente: string;
+  promedio: number;
+  fechaActualizacion: string;
+}

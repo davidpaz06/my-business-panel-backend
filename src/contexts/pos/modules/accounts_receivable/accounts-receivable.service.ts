@@ -30,12 +30,33 @@ export class AccountsReceivableService {
     private readonly warehouseService: WarehouseService,
   ) {}
 
-  async getAccountsReceivable(session: IUserSession) {
-    const result = this.isSuperuser(session.role_id)
-      ? await this.db.query(ar.getAllGlobal)
-      : await this.db.query(ar.getAllByTenant, [session.tenant_id]);
+  async getAccountsReceivable(
+    session: IUserSession,
+    page = 1,
+    limit = 50,
+  ) {
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 50;
+    const offset = (safePage - 1) * safeLimit;
 
-    return result.rows;
+    const result = this.isSuperuser(session.role_id)
+      ? await this.db.query(ar.getAllGlobal, [safeLimit, offset])
+      : await this.db.query(ar.getAllByTenant, [
+          session.tenant_id,
+          safeLimit,
+          offset,
+        ]);
+
+    const total = result.rows[0]?.total_count
+      ? parseInt(result.rows[0].total_count, 10)
+      : 0;
+
+    return {
+      receivables: result.rows.map(({ total_count, ...row }) => row),
+      total,
+      page: safePage,
+      limit: safeLimit,
+    };
   }
 
   async getCatalogs() {

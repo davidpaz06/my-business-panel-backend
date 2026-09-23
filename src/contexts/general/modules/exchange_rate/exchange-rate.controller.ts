@@ -40,10 +40,14 @@ export class ExchangeRateController {
     return this.service.getCurrentBase();
   }
 
-  /** Carga una tasa base nueva. Afecta a todos los tenants. */
+  /**
+   * Carga una tasa base nueva. Afecta a todos los tenants -- restringido a
+   * superuser (no admin): es un dato global del BCV, no una configuracion
+   * de tenant, y en produccion se carga automaticamente via BcvRateSyncService.
+   */
   @Post('base')
   @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'superuser')
+  @RequiredRole('superuser')
   setBase(@Body() dto: SetBaseRateDto) {
     return this.service.setBaseRate(dto);
   }

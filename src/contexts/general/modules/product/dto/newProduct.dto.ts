@@ -1,4 +1,5 @@
 import {
+  ArrayMinSize,
   IsBoolean,
   IsNumber,
   IsOptional,
@@ -58,10 +59,17 @@ export class NewProductDto {
   @IsUUID('4', { each: true })
   attribute_value_ids?: string[];
 
-  @IsOptional()
+  /**
+   * Familia/dimensión obligatoria (spec Venezuela: no se puede guardar un
+   * producto sin clasificar). En UpdateProductDto (PartialType) el campo se
+   * vuelve opcional, pero si se envia debe seguir trayendo al menos 1 id --
+   * asi una edicion parcial que no toca clasificacion puede omitirlo, pero
+   * no puede mandarlo vacio para borrarla.
+   */
   @IsArray()
+  @ArrayMinSize(1, { message: 'Debe asignar al menos una familia o dimensión' })
   @IsUUID('4', { each: true })
-  group_ids?: string[];
+  group_ids!: string[];
 }
 
 export interface ProductInsert {

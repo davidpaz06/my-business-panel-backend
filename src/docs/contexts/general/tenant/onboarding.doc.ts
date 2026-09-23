@@ -1,19 +1,18 @@
 /**
  * POST /tenant — Flujo completo de onboarding
  *
- * Cuando el body incluye los campos opcionales `user`, `hacienda` y
- * `subscription`, el endpoint ejecuta todo el proceso de alta de tenant
- * dentro de una sola transacción:
+ * Cuando el body incluye los campos opcionales `user` y `subscription`,
+ * el endpoint ejecuta todo el proceso de alta de tenant dentro de una
+ * sola transacción:
  *
  *  1. Crea el tenant.
  *  2. Crea la sucursal principal.
  *  3. Crea el usuario administrador y su empleado/contrato asociado.
- *  4. Guarda la configuración cifrada de Hacienda.
- *  5. Crea el customer en Stripe, adjunta el método de pago y crea la
+ *  4. Crea el customer en Stripe, adjunta el método de pago y crea la
  *     suscripción.
- *  6. Registra el pago y la suscripción en la base de datos.
- *  7. Hace commit de la transacción.
- *  8. Genera un JWT y lo coloca como cookie `auth_token` (httpOnly).
+ *  5. Registra el pago y la suscripción en la base de datos.
+ *  6. Hace commit de la transacción.
+ *  7. Genera un JWT y lo coloca como cookie `auth_token` (httpOnly).
  *
  * Si algún paso falla:
  *  - Se revierte toda la transacción (rollback).
@@ -27,8 +26,8 @@ export const onboardingDoc = {
   operation: {
     summary: 'Onboarding completo de tenant',
     description:
-      'Crea un tenant junto con su sucursal principal, usuario administrador, ' +
-      'configuración de Hacienda y suscripción con Stripe en una sola solicitud transaccional. ' +
+      'Crea un tenant junto con su sucursal principal, usuario administrador ' +
+      'y suscripción con Stripe en una sola solicitud transaccional. ' +
       'El token JWT se devuelve como cookie httpOnly.',
   },
 
@@ -85,19 +84,6 @@ export const onboardingDoc = {
         last_name: 'Pérez',
         doc_number: '123456789',
         phone: '+506 8888-0000',
-      },
-    },
-
-    // ── Hacienda ────────────────────────────────────────────────────────
-    hacienda: {
-      description:
-        'Credenciales de Hacienda ATV. Se almacenan cifradas con AES-256-GCM.',
-      example: {
-        hacienda_username: 'cpj-3-101-123456',
-        hacienda_password: 'secret',
-        hacienda_client_id: 'api-prod',
-        p12_base64: '<base64-encoded-p12>',
-        p12_password: 'p12secret',
       },
     },
 

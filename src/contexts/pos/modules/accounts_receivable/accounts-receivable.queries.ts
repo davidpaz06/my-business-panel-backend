@@ -34,26 +34,34 @@ const accountReceivableListSelect = `
 export const accountsReceivableQueries = {
   ar: {
     getAllByTenant: `
-      ${accountReceivableListSelect}
-      WHERE ar.tenant_id = $1
-      GROUP BY
-        sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
-        ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
-        tc.first_name, tc.last_name, tc.document_number,
-        ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
-        sar.created_at, sar.updated_at
-      ORDER BY ar.due_date ASC, sar.created_at DESC
+      SELECT *, COUNT(*) OVER() AS total_count
+      FROM (
+        ${accountReceivableListSelect}
+        WHERE ar.tenant_id = $1
+        GROUP BY
+          sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
+          ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
+          tc.first_name, tc.last_name, tc.document_number,
+          ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
+          sar.created_at, sar.updated_at
+      ) receivables
+      ORDER BY created_at DESC, due_date DESC
+      LIMIT $2 OFFSET $3
     `,
 
     getAllGlobal: `
-      ${accountReceivableListSelect}
-      GROUP BY
-        sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
-        ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
-        tc.first_name, tc.last_name, tc.document_number,
-        ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
-        sar.created_at, sar.updated_at
-      ORDER BY ar.due_date ASC, sar.created_at DESC
+      SELECT *, COUNT(*) OVER() AS total_count
+      FROM (
+        ${accountReceivableListSelect}
+        GROUP BY
+          sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
+          ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
+          tc.first_name, tc.last_name, tc.document_number,
+          ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
+          sar.created_at, sar.updated_at
+      ) receivables
+      ORDER BY created_at DESC, due_date DESC
+      LIMIT $1 OFFSET $2
     `,
 
     getUpdatedReceivableById: `
