@@ -1,19 +1,22 @@
-export interface ExchangeRate {
-  exchange_rate_id: string;
+/** Tasa vigente aplicable a un tenant: base global + su diferencial. */
+export interface EffectiveExchangeRate {
+  base_rate: string;
+  delta: string;
+  effective_rate: string;
+  base_at: string;
+  delta_at: string | null;
   from_currency_id: number;
   to_currency_id: number;
-  rate: string | number;
-  effective_date: string;
-  source: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
-export interface ExchangeRateWithCurrencies extends ExchangeRate {
-  from_currency_code: string;
-  from_currency_name?: string;
-  from_currency_symbol: string;
-  to_currency_code: string;
-  to_currency_name?: string;
-  to_currency_symbol: string;
+/** Fila del historial: un cambio de tasa base o de diferencial. */
+export interface ExchangeRateLedgerEntry {
+  tenant_id: string;
+  effective_at: string;
+  change_kind: 'base' | 'delta';
+  source: string | null;
+  base_rate: string;
+  delta: string;
+  effective_rate: string;
+  created_at: string;
 }

@@ -1,79 +1,86 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import Database from '@crane-technologies/database';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { generalQueries } from '@general/general.queries';
-import { CreateExchangeRateDto } from './dto/create-exchange-rate.dto';
-import { UpdateExchangeRateDto } from './dto/update-exchange-rate.dto';
+import { SetBaseRateDto } from './dto/set-base-rate.dto';
+import { SetDeltaDto } from './dto/set-delta.dto';
+import {
+  EffectiveExchangeRate,
+  ExchangeRateLedgerEntry,
+} from './interfaces/exchange-rate.interface';
 
 const { exchangeRate } = generalQueries;
 
+/**
+ * Tasa de cambio bimonetaria USD -> VES (Venezuela).
+ *
+ * Modelo (migrations/general/034):
+ *   - Tasa base: ledger GLOBAL e inmutable. Una sola vigente, la mas
+ *     reciente. Misma base para todos los tenants.
+ *   - Diferencial (delta): ledger POR TENANT e inmutable. El tenant cobra
+ *     por encima o por debajo de la base. Persiste hasta que se cargue
+ *     otro valor; 0 lo restablece.
+ *   - Tasa efectiva del tenant = base + delta. Es la que aplica a toda la
+ *     aplicacion; resolverla siempre con getEffectiveRate(), nunca leyendo
+ *     exchange_rate directo.
+ *
+ * Nada se edita ni se borra: cambiar la tasa o el delta agrega una fila.
+ */
 @Injectable()
 export class ExchangeRateService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
-  async getAll() {
-    const result = await this.db.query(exchangeRate.all);
+  /** Tasa vigente aplicable al tenant (base + su diferencial). */
+  async getEffectiveRate(tenantId: string): Promise<EffectiveExchangeRate> {
+    const result = await this.db.query(exchangeRate.effectiveForTenant, [
+      tenantId,
+    ]);
+    const row = result.rows[0];
+
+    if (!row || row.base_rate === null) {
+      throw new BadRequestException(
+        'No hay tasa de cambio base cargada. Registre la tasa USD -> VES antes de operar.',
+      );
+    }
+
+    return row;
+  }
+
+  /** Historial completo del tenant: cada cambio de tasa base o de delta. */
+  async getLedger(tenantId: string): Promise<ExchangeRateLedgerEntry[]> {
+    const result = await this.db.query(exchangeRate.ledgerByTenant, [tenantId]);
     return result.rows;
   }
 
-  async getById(id: string) {
-    const result = await this.db.query(exchangeRate.byId, [id]);
-    if (!result.rows[0]) throw new NotFoundException('Exchange rate not found');
-    return result.rows[0];
-  }
-
-  async getLatestForPair(fromCurrencyId: number, toCurrencyId: number) {
-    if (fromCurrencyId === toCurrencyId) {
-      throw new BadRequestException(
-        'from_currency_id must differ from to_currency_id',
-      );
-    }
-    const result = await this.db.query(exchangeRate.latestForPair, [
-      fromCurrencyId,
-      toCurrencyId,
-    ]);
+  /** Tasa base global vigente, sin el diferencial de ningun tenant. */
+  async getCurrentBase() {
+    const result = await this.db.query(exchangeRate.currentBase, []);
     return result.rows[0] ?? null;
   }
 
-  async create(dto: CreateExchangeRateDto) {
-    if (dto.from_currency_id === dto.to_currency_id) {
-      throw new BadRequestException(
-        'from_currency_id must differ from to_currency_id',
-      );
-    }
-    const result = await this.db.query(exchangeRate.upsert, [
-      dto.from_currency_id,
-      dto.to_currency_id,
+  /**
+   * Carga una tasa base nueva. Afecta a TODOS los tenants (la base es la
+   * del BCV, un dato del mundo). Agrega una fila al ledger, no edita nada.
+   */
+  async setBaseRate(dto: SetBaseRateDto) {
+    const result = await this.db.query(exchangeRate.insertBaseRate, [
       dto.rate,
-      dto.effective_date,
-      dto.source ?? 'MANUAL',
-    ]);
-    return result.rows[0];
-  }
-
-  async update(id: string, dto: UpdateExchangeRateDto) {
-    const updatedKeys = Object.entries(dto).filter(([, v]) => v !== undefined);
-    if (updatedKeys.length === 0) {
-      throw new BadRequestException('No valid fields to update');
-    }
-    const result = await this.db.query(exchangeRate.update, [
-      id,
-      dto.rate ?? null,
-      dto.effective_date ?? null,
       dto.source ?? null,
     ]);
-    if (!result.rows[0]) throw new NotFoundException('Exchange rate not found');
     return result.rows[0];
   }
 
-  async delete(id: string) {
-    const result = await this.db.query(exchangeRate.delete, [id]);
-    if (!result.rows[0]) throw new NotFoundException('Exchange rate not found');
-    return { message: 'Exchange rate deleted', exchange_rate_id: id };
+  /**
+   * Carga el diferencial del tenant. Agrega una fila al ledger, no edita
+   * la anterior -- el historial queda completo. delta = 0 restablece.
+   */
+  async setDelta(tenantId: string, userId: string, dto: SetDeltaDto) {
+    const result = await this.db.query(exchangeRate.insertDelta, [
+      tenantId,
+      dto.delta,
+      dto.source ?? null,
+      userId,
+    ]);
+    return result.rows[0];
   }
 }

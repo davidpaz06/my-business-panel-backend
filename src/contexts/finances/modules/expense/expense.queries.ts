@@ -457,30 +457,25 @@ export const expenseQueries = {
   `,
 
   getSalesVsExpenses: `
-    WITH latest_rates AS (
-      SELECT DISTINCT ON (er.from_currency_id)
-        er.from_currency_id,
-        er.rate
-      FROM general_schema.exchange_rate er
-      INNER JOIN general_schema.currency crc
-        ON  crc.currency_id = er.to_currency_id
-        AND crc.currency_code = 'CRC'
-      ORDER BY er.from_currency_id, er.effective_date DESC
+    -- Tasa efectiva del tenant (base + su diferencial). Antes esto buscaba
+    -- currency_code = 'CRC' -- moneda que dejo de existir en la migracion a
+    -- Venezuela -- por lo que latest_rates quedaba vacio y las ventas en USD
+    -- se sumaban como si 1 USD = 1 Bs. contra gastos en Bs.
+    latest_rates AS (
+      SELECT effective_rate AS rate
+      FROM general_schema.get_effective_exchange_rate($1::uuid)
     ),
-    crc_currency AS (
-      SELECT currency_id FROM general_schema.currency WHERE currency_code = 'CRC' LIMIT 1
+    ves_currency AS (
+      SELECT currency_id FROM general_schema.currency WHERE currency_code = 'VES' LIMIT 1
     ),
     sales_agg AS (
       SELECT
         DATE_TRUNC('{{GRANULARITY}}', s.sale_date)::text AS period,
         COALESCE(SUM(
           CASE
-            WHEN s.currency_id = (SELECT currency_id FROM crc_currency)
+            WHEN s.currency_id = (SELECT currency_id FROM ves_currency)
               THEN s.total_amount
-            ELSE s.total_amount * COALESCE(
-              (SELECT lr.rate FROM latest_rates lr WHERE lr.from_currency_id = s.currency_id),
-              1
-            )
+            ELSE s.total_amount * COALESCE((SELECT lr.rate FROM latest_rates lr), 1)
           END
         ), 0) AS total_sales
       FROM pos_schema.sale s

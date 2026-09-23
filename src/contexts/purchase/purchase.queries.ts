@@ -771,27 +771,13 @@ export const purchaseQueryDefs = {
       ORDER BY currency_id ASC
     `,
 
+    // Tasa efectiva del tenant (base global + su diferencial), fuente unica
+    // de verdad -- ver general_schema.get_effective_exchange_rate. Antes
+    // leia exchange_rate directo, ignoraba el diferencial y hardcodeaba
+    // to_currency_id = 1.
     getLatestExchangeRate: `
-      SELECT
-        er.exchange_rate_id,
-        er.from_currency_id,
-        fc.currency_code AS from_currency_code,
-        fc.currency_name AS from_currency_name,
-        fc.symbol        AS from_currency_symbol,
-        er.to_currency_id,
-        tc.currency_code AS to_currency_code,
-        tc.currency_name AS to_currency_name,
-        tc.symbol        AS to_currency_symbol,
-        er.rate,
-        er.effective_date,
-        er.updated_at
-      FROM general_schema.exchange_rate er
-      JOIN general_schema.currency fc ON fc.currency_id = er.from_currency_id
-      JOIN general_schema.currency tc ON tc.currency_id = er.to_currency_id
-      WHERE er.from_currency_id = $1
-        AND er.to_currency_id   = 1
-      ORDER BY er.effective_date DESC
-      LIMIT 1
+      SELECT base_rate, delta, effective_rate, base_at, delta_at
+      FROM general_schema.get_effective_exchange_rate($1::uuid)
     `,
   },
 };

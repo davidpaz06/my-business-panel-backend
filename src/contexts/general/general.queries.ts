@@ -302,66 +302,44 @@ export const generalQueryDefs = {
   },
 
   exchangeRate: {
-    all: `
-      SELECT er.exchange_rate_id, er.from_currency_id, er.to_currency_id,
-             er.rate, er.effective_date, er.source, er.created_at, er.updated_at,
-             fc.currency_code AS from_currency_code, fc.currency_name AS from_currency_name, fc.symbol AS from_currency_symbol,
-             tc.currency_code AS to_currency_code,   tc.currency_name AS to_currency_name,   tc.symbol AS to_currency_symbol
-      FROM general_schema.exchange_rate er
-      JOIN general_schema.currency fc ON fc.currency_id = er.from_currency_id
-      JOIN general_schema.currency tc ON tc.currency_id = er.to_currency_id
-      ORDER BY er.effective_date DESC, fc.currency_code, tc.currency_code
+    // Ledger global inmutable de la tasa base USD -> VES. Nunca se edita ni
+    // se borra: cada cambio es una fila nueva (migrations/general/034).
+    ledgerByTenant: `
+      SELECT tenant_id, effective_at, change_kind, source,
+             base_rate, delta, effective_rate, created_at
+      FROM general_schema.tenant_exchange_rate_ledger
+      WHERE tenant_id = $1
+      LIMIT 200
     `,
-    byId: `
-      SELECT exchange_rate_id, from_currency_id, to_currency_id, rate,
-             effective_date, source, created_at, updated_at
+    // Tasa vigente aplicable al tenant: base global + su diferencial.
+    // Fuente unica de verdad para toda la aplicacion.
+    effectiveForTenant: `
+      SELECT
+        r.base_rate, r.delta, r.effective_rate, r.base_at, r.delta_at,
+        (SELECT currency_id FROM general_schema.currency WHERE currency_code = 'USD') AS from_currency_id,
+        (SELECT currency_id FROM general_schema.currency WHERE currency_code = 'VES') AS to_currency_id
+      FROM general_schema.get_effective_exchange_rate($1) r
+    `,
+    insertBaseRate: `
+      INSERT INTO general_schema.exchange_rate
+        (from_currency_id, to_currency_id, rate, effective_at, effective_date, source)
+      SELECT
+        (SELECT currency_id FROM general_schema.currency WHERE currency_code = 'USD'),
+        (SELECT currency_id FROM general_schema.currency WHERE currency_code = 'VES'),
+        $1, CURRENT_TIMESTAMP, CURRENT_DATE, COALESCE($2, 'MANUAL')
+      RETURNING exchange_rate_id, rate, effective_at, source, created_at
+    `,
+    insertDelta: `
+      INSERT INTO general_schema.tenant_exchange_delta
+        (tenant_id, delta, source, created_by)
+      VALUES ($1, $2, COALESCE($3, 'MANUAL'), $4)
+      RETURNING delta_id, tenant_id, delta, effective_at, source, created_at
+    `,
+    currentBase: `
+      SELECT exchange_rate_id, rate, effective_at, source, created_at
       FROM general_schema.exchange_rate
-      WHERE exchange_rate_id = $1 LIMIT 1
-    `,
-    latestForPair: `
-      SELECT er.exchange_rate_id, er.from_currency_id, er.to_currency_id,
-             er.rate, er.effective_date, er.source, er.created_at, er.updated_at,
-             fc.currency_code AS from_currency_code, fc.symbol AS from_currency_symbol,
-             tc.currency_code AS to_currency_code,   tc.symbol AS to_currency_symbol
-      FROM general_schema.exchange_rate er
-      JOIN general_schema.currency fc ON fc.currency_id = er.from_currency_id
-      JOIN general_schema.currency tc ON tc.currency_id = er.to_currency_id
-      WHERE er.from_currency_id = $1 AND er.to_currency_id = $2
-      ORDER BY er.effective_date DESC, er.created_at DESC
+      ORDER BY effective_at DESC, created_at DESC
       LIMIT 1
-    `,
-    create: `
-      INSERT INTO general_schema.exchange_rate
-        (from_currency_id, to_currency_id, rate, effective_date, source)
-      VALUES ($1, $2, $3, $4, COALESCE($5, 'MANUAL'))
-      RETURNING exchange_rate_id, from_currency_id, to_currency_id, rate,
-                effective_date, source, created_at, updated_at
-    `,
-    upsert: `
-      INSERT INTO general_schema.exchange_rate
-        (from_currency_id, to_currency_id, rate, effective_date, source)
-      VALUES ($1, $2, $3, $4, COALESCE($5, 'MANUAL'))
-      ON CONFLICT (from_currency_id, to_currency_id, effective_date)
-      DO UPDATE SET rate = EXCLUDED.rate,
-                    source = EXCLUDED.source,
-                    updated_at = NOW()
-      RETURNING exchange_rate_id, from_currency_id, to_currency_id, rate,
-                effective_date, source, created_at, updated_at
-    `,
-    update: `
-      UPDATE general_schema.exchange_rate
-      SET rate = COALESCE($2, rate),
-          effective_date = COALESCE($3, effective_date),
-          source = COALESCE($4, source),
-          updated_at = NOW()
-      WHERE exchange_rate_id = $1
-      RETURNING exchange_rate_id, from_currency_id, to_currency_id, rate,
-                effective_date, source, created_at, updated_at
-    `,
-    delete: `
-      DELETE FROM general_schema.exchange_rate
-      WHERE exchange_rate_id = $1
-      RETURNING exchange_rate_id
     `,
   },
 

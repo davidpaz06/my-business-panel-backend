@@ -309,9 +309,10 @@ export class PurchaseService {
     };
   }
 
-  async getExchangeRate(fromCurrencyId: number) {
+  /** Tasa efectiva del tenant (base + diferencial) aplicada a las compras. */
+  async getExchangeRate(tenantId: string) {
     const result = await this.db.query(catalog.getLatestExchangeRate, [
-      fromCurrencyId,
+      tenantId,
     ]);
     return result.rows[0] ?? null;
   }

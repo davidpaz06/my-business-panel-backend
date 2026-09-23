@@ -101,12 +101,12 @@ export class PurchaseController {
   }
 
   @ApiOperation({
-    summary: 'Obtener tasa de cambio más reciente para una moneda vs CRC',
+    summary: 'Tasa de cambio USD -> VES efectiva del tenant (base + diferencial)',
   })
   @ApiResponse({ status: 200, description: 'Tasa de cambio obtenida' })
-  @Get('exchange-rate/:currencyId')
-  getExchangeRate(@Param('currencyId', ParseIntPipe) currencyId: number) {
-    return this.purchaseService.getExchangeRate(currencyId);
+  @Get('exchange-rate')
+  getExchangeRate(@Session() user: IUserSession) {
+    return this.purchaseService.getExchangeRate(user.tenant_id);
   }
 
   @ApiOperation({ summary: 'Listar cuentas por pagar de compras' })
