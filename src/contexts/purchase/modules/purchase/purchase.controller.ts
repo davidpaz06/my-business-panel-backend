@@ -5,7 +5,6 @@ import {
   Body,
   Patch,
   Param,
-  ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -15,6 +14,7 @@ import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { UpdateSupplierInvoiceDto } from './dto/update-supplier-invoice.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
@@ -101,7 +101,8 @@ export class PurchaseController {
   }
 
   @ApiOperation({
-    summary: 'Tasa de cambio USD -> VES efectiva del tenant (base + diferencial)',
+    summary:
+      'Tasa de cambio USD -> VES efectiva del tenant (base + diferencial)',
   })
   @ApiResponse({ status: 200, description: 'Tasa de cambio obtenida' })
   @Get('exchange-rate')
@@ -154,6 +155,26 @@ export class PurchaseController {
     @Session() session: IUserSession,
   ) {
     return this.purchaseService.updateOrderStatus(id, dto.status_id, session);
+  }
+
+  @ApiOperation({
+    summary: 'Editar items de una factura de compra',
+    description:
+      'Solo permitido mientras la orden asociada esta en estado "enviada" (Shipped). Se bloquea al pasar a "entregada" (Delivered).',
+  })
+  @ApiResponse({ status: 200, description: 'Factura actualizada' })
+  @ApiResponse({
+    status: 403,
+    description: 'La orden no esta en estado editable',
+  })
+  @ApiResponse({ status: 404, description: 'Factura no encontrada' })
+  @Patch('invoices/:invoiceId')
+  updateSupplierInvoice(
+    @Param('invoiceId') invoiceId: string,
+    @Body() dto: UpdateSupplierInvoiceDto,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.updateSupplierInvoice(invoiceId, dto, session);
   }
 
   @ApiOperation(updatePurchaseOrderDoc.operation)

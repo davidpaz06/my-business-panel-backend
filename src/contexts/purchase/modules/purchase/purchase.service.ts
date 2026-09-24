@@ -10,6 +10,7 @@ import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
+import { UpdateSupplierInvoiceDto } from './dto/update-supplier-invoice.dto';
 import Database from '@crane-technologies/database/dist/components/Database';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { purchaseQueries } from '@purchase/purchase.queries';
@@ -20,6 +21,7 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 
 const { purchase, payments, ap, catalog } = purchaseQueries;
 const SUPERUSER_HIERARCHY = 1;
+const INVOICE_EDITABLE_ORDER_STATUS_ID = 2; // Shipped / "enviada"
 
 type OrderAccessRow = {
   purchase_order_id: string;
@@ -30,6 +32,13 @@ type OrderAccessRow = {
 type PayableAccessRow = {
   purchase_account_payable_id: string;
   purchase_order_id: string;
+  tenant_id: string;
+};
+
+type InvoiceAccessRow = {
+  supplier_invoice_id: string;
+  purchase_order_id: string;
+  purchase_order_status_id: number;
   tenant_id: string;
 };
 
@@ -52,6 +61,7 @@ export class PurchaseService {
       items,
       has_invoice,
       payment_condition,
+      payment_due_date,
     } = param;
 
     if (!items?.length) {
@@ -87,6 +97,7 @@ export class PurchaseService {
       JSON.stringify(items),
       has_invoice ?? true,
       payment_condition ?? 'CREDIT',
+      payment_due_date ?? null,
     ]);
 
     this.logger.log(result);
@@ -421,6 +432,43 @@ export class PurchaseService {
     }
 
     return this.getPurchaseOrderById(orderId, session);
+  }
+
+  async updateSupplierInvoice(
+    invoiceId: string,
+    dto: UpdateSupplierInvoiceDto,
+    session: IUserSession,
+  ) {
+    const accessResult = await this.db.query(purchase.getInvoiceAccess, [
+      invoiceId,
+    ]);
+    const access = accessResult.rows[0] as InvoiceAccessRow | undefined;
+
+    if (!access) {
+      throw new NotFoundException('Factura no encontrada');
+    }
+
+    this.assertTenantAccess(access.tenant_id, session);
+
+    if (access.purchase_order_status_id !== INVOICE_EDITABLE_ORDER_STATUS_ID) {
+      throw new ForbiddenException(
+        'La factura solo puede editarse mientras la orden esta en estado "enviada"',
+      );
+    }
+
+    try {
+      await this.db.query(purchase.updateSupplierInvoice, [
+        invoiceId,
+        JSON.stringify(dto.items),
+        access.tenant_id,
+      ]);
+    } catch (e: any) {
+      throw new BadRequestException(
+        'Error al actualizar la factura: ' + (e.detail || e.message),
+      );
+    }
+
+    return this.getPurchaseOrderById(access.purchase_order_id, session);
   }
 
   async getThreeWayMatching(orderId: string, session: IUserSession) {

@@ -28,7 +28,7 @@ export class CreatePaymentDto {
 
   @ApiProperty({
     description:
-      'Currency ID (from general_schema.currency). Defaults to 1 (CRC).',
+      'Currency ID (from general_schema.currency). Defaults to 2 (USD), la moneda base de Compras/CxP.',
     required: false,
   })
   @IsOptional()

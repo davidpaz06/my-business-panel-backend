@@ -5,6 +5,7 @@ const purchaseOrderListSelect = `
     po.purchase_order_id,
     po.purchase_order_date,
     po.expected_delivery_date,
+    po.payment_due_date,
     po.purchase_order_status_id,
     pos.status_name AS purchase_order_status_name,
     s.supplier_id,
@@ -127,7 +128,7 @@ export const purchaseQueryDefs = {
   purchase: {
     createPurchaseOrder: `
       SELECT purchase_schema.create_purchase_order(
-        $1, $2, $3, $4, $5, $6
+        $1, $2, $3, $4, $5, $6, $7
       ) AS purchase_order_id
     `,
 
@@ -158,6 +159,27 @@ export const purchaseQueryDefs = {
         ON b.branch_id = w.branch_id
       WHERE po.purchase_order_id = $1
       LIMIT 1
+    `,
+
+    getInvoiceAccess: `
+      SELECT
+        si.supplier_invoice_id,
+        si.purchase_order_id,
+        po.purchase_order_status_id,
+        b.tenant_id
+      FROM purchase_schema.supplier_invoice si
+      INNER JOIN purchase_schema.purchase_order po
+        ON po.purchase_order_id = si.purchase_order_id
+      INNER JOIN inventory_schema.warehouse w
+        ON w.warehouse_id = po.warehouse_id
+      INNER JOIN general_schema.branch b
+        ON b.branch_id = w.branch_id
+      WHERE si.supplier_invoice_id = $1
+      LIMIT 1
+    `,
+
+    updateSupplierInvoice: `
+      SELECT purchase_schema.update_supplier_invoice($1, $2, $3)
     `,
 
     updateStatus: `
@@ -225,6 +247,7 @@ export const purchaseQueryDefs = {
         po.purchase_order_id,
         po.purchase_order_date,
         po.expected_delivery_date,
+        po.payment_due_date,
         po.purchase_order_status_id,
         pos.status_name AS purchase_order_status_name,
         s.supplier_id,
@@ -567,7 +590,7 @@ export const purchaseQueryDefs = {
       INSERT INTO purchase_schema.purchase_order_payment
         (purchase_account_payable_id, amount_paid, payment_method_id, currency_id, payment_reference)
       VALUES
-        ($1, $2, $3, COALESCE($4, 1), $5)
+        ($1, $2, $3, COALESCE($4, 2), $5)
       RETURNING purchase_order_payment_id
     `,
 
@@ -729,6 +752,64 @@ export const purchaseQueryDefs = {
         description
       FROM purchase_schema.purchase_order_payment_alert_type
       ORDER BY payment_alert_type_id ASC
+    `,
+  },
+
+  disputes: {
+    create: `
+      INSERT INTO purchase_schema.purchase_dispute(
+        purchase_order_id,
+        supplier_invoice_id,
+        tenant_id,
+        dispute_type,
+        description
+      ) VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `,
+
+    getOrderAccessForDispute: `
+      SELECT
+        po.purchase_order_id,
+        b.tenant_id
+      FROM purchase_schema.purchase_order po
+      INNER JOIN inventory_schema.warehouse w
+        ON w.warehouse_id = po.warehouse_id
+      INNER JOIN general_schema.branch b
+        ON b.branch_id = w.branch_id
+      WHERE po.purchase_order_id = $1
+      LIMIT 1
+    `,
+
+    listByOrder: `
+      SELECT *
+      FROM purchase_schema.purchase_dispute
+      WHERE purchase_order_id = $1
+      ORDER BY created_at DESC
+    `,
+
+    listByTenant: `
+      SELECT *
+      FROM purchase_schema.purchase_dispute
+      WHERE tenant_id = $1
+      ORDER BY created_at DESC
+    `,
+
+    getAccessById: `
+      SELECT dispute_id, tenant_id, status
+      FROM purchase_schema.purchase_dispute
+      WHERE dispute_id = $1
+      LIMIT 1
+    `,
+
+    resolve: `
+      UPDATE purchase_schema.purchase_dispute
+      SET status = 'RESOLVED',
+          resolution_notes = $1,
+          resolved_at = CURRENT_TIMESTAMP,
+          notify_supplier_pending = FALSE,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE dispute_id = $2
+      RETURNING *
     `,
   },
 

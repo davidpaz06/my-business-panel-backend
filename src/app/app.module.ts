@@ -51,6 +51,7 @@ import { CollectionAlertsModule } from '@/contexts/pos/modules/collection_alerts
 import { PurchaseModule } from '@/contexts/purchase/modules/purchase/purchase.module';
 import { SuppliersModule } from '@/contexts/purchase/modules/suppliers/suppliers.module';
 import { PaymentAlertsModule } from '@/contexts/purchase/modules/payment_alerts/payment-alerts.module';
+import { DisputesModule } from '@/contexts/purchase/modules/disputes/disputes.module';
 
 // INVENTORY Modules
 import { WarehouseModule } from '@/contexts/inventory/modules/warehouse/warehouse.module';
@@ -153,6 +154,7 @@ import { IvaModule } from '@/contexts/finances/modules/iva/iva.module';
     SuppliersModule,
     PurchaseModule,
     PaymentAlertsModule,
+    DisputesModule,
     IncapacityModule,
     SuspentionModule,
     TurnsModule,

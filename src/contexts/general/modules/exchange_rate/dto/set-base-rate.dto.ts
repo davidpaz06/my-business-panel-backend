@@ -1,5 +1,11 @@
 import { Transform, Type } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class SetBaseRateDto {
   /** Tasa base USD -> VES (BCV). Afecta a todos los tenants. */

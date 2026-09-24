@@ -30,11 +30,7 @@ export class AccountsReceivableService {
     private readonly warehouseService: WarehouseService,
   ) {}
 
-  async getAccountsReceivable(
-    session: IUserSession,
-    page = 1,
-    limit = 50,
-  ) {
+  async getAccountsReceivable(session: IUserSession, page = 1, limit = 50) {
     const safePage = Number.isFinite(page) && page > 0 ? page : 1;
     const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 50;
     const offset = (safePage - 1) * safeLimit;

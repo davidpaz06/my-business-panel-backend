@@ -14,12 +14,12 @@ export const createPurchaseOrderDoc = {
       example: '2026-05-01',
     },
     items: {
-      description: 'Arreglo de productos a ordenar.',
+      description:
+        'Arreglo de productos a ordenar. unit_price esta deprecado: el costo se resuelve server-side desde el producto (general_schema.product_variant.cost_price, USD) y cualquier valor enviado aqui se ignora.',
       example: [
         {
           product_variant_id: '323e4567-e89b-12d3-a456-426614174000',
           quantity_ordered: 10,
-          unit_price: 25.5,
         },
       ],
     },
@@ -30,6 +30,11 @@ export const createPurchaseOrderDoc = {
     payment_condition: {
       description: 'Condición de pago: CREDIT o IN_FULL.',
       example: 'CREDIT',
+    },
+    payment_due_date: {
+      description:
+        'Fecha límite de pago en formato ISO 8601. Obligatoria cuando payment_condition es CREDIT; ignorada para IN_FULL.',
+      example: '2026-06-01',
     },
   },
 

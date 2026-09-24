@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CreditDebitNoteService } from './credit-debit-note.service';
 import {
@@ -16,7 +24,10 @@ export class CreditDebitNoteController {
   constructor(private readonly service: CreditDebitNoteService) {}
 
   @Post()
-  create(@Body() body: CreateCreditDebitNoteDto, @Session() user: IUserSession) {
+  create(
+    @Body() body: CreateCreditDebitNoteDto,
+    @Session() user: IUserSession,
+  ) {
     return this.service.create(user.tenant_id, user.user_id, body);
   }
 

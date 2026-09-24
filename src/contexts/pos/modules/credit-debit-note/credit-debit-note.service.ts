@@ -8,7 +8,10 @@ import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { posQueries } from '@pos/pos.queries';
-import { CreateCreditDebitNoteDto, VoidCreditDebitNoteDto } from './dto/credit-debit-note.dto';
+import {
+  CreateCreditDebitNoteDto,
+  VoidCreditDebitNoteDto,
+} from './dto/credit-debit-note.dto';
 import {
   CreditDebitNote,
   InvoiceContextForNote,
