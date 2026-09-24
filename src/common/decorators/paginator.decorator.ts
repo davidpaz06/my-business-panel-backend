@@ -10,6 +10,9 @@ export interface PaginateConfig {
   columns: string[];
   pkFields: string[];
   whereFields?: string[];
+  /** Columna sobre la que aplicar el filtro de rango de fechas
+   *  (?date_from=&date_to=), si el endpoint lo soporta. */
+  dateField?: string;
 }
 
 export const PaginatedResult = createParamDecorator(
@@ -36,6 +39,13 @@ export const PaginatedResult = createParamDecorator(
           where[field] = value;
         }
       });
+    }
+    if (config.dateField) {
+      const dateFrom = request.query.date_from;
+      const dateTo = request.query.date_to;
+      if (dateFrom || dateTo) {
+        where[config.dateField] = { gte: dateFrom, lte: dateTo };
+      }
     }
 
     const result = await paginate({

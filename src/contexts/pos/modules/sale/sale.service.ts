@@ -468,7 +468,13 @@ export class SaleService {
     return result.rows;
   }
 
-  async getAllSalesByTenant(tenantId: string, limit = 100, offset = 0) {
+  async getAllSalesByTenant(
+    tenantId: string,
+    limit = 100,
+    offset = 0,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
     return paginate({
       dbClient: this.db,
       table: `
@@ -501,7 +507,12 @@ export class SaleService {
         'return_transaction_id',
       ],
       pkFields: ['sale_id'],
-      where: { tenant_id: tenantId },
+      where: {
+        tenant_id: tenantId,
+        ...(dateFrom || dateTo
+          ? { sale_date: { gte: dateFrom, lte: dateTo } }
+          : {}),
+      },
       options: { limit, offset, sortBy: 'created_at', order: 'DESC' },
     });
   }

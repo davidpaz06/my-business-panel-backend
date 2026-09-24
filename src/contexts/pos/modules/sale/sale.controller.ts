@@ -56,11 +56,15 @@ export class SaleController {
     @Req() req: any,
     @Query('limit') limit = '100',
     @Query('offset') offset = '0',
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
   ) {
     return this.saleService.getAllSalesByTenant(
       req.user.tenant_id,
       parseInt(limit, 10),
       parseInt(offset, 10),
+      dateFrom,
+      dateTo,
     );
   }
 
@@ -92,6 +96,7 @@ export class SaleController {
     ],
     pkFields: ['sale_id'],
     whereFields: ['branch_id'],
+    dateField: 'sale_date',
   })
   getAllSalesByBranch(
     @Param('branch_id') branch_id: string,

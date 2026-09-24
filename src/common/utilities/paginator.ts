@@ -13,6 +13,11 @@ interface PaginateOptions {
   order?: 'ASC' | 'DESC';
 }
 
+interface RangeFilter {
+  gte?: string | number;
+  lte?: string | number;
+}
+
 interface PaginateParams {
   dbClient: {
     query: (sql: string, params?: any[]) => Promise<{ rows: any[] }>;
@@ -20,9 +25,15 @@ interface PaginateParams {
   table: string;
   selectColumns: string[];
   pkFields: string[];
-  where?: Record<string, any>;
+  where?: Record<string, any | RangeFilter>;
   options?: PaginateOptions;
 }
+
+const isRangeFilter = (value: unknown): value is RangeFilter =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  ('gte' in value || 'lte' in value);
 
 const VALID_ORDER = new Set(['ASC', 'DESC']);
 const IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
@@ -54,6 +65,17 @@ export async function paginate<T = any>({
 
   if (where) {
     for (const [key, value] of Object.entries(where)) {
+      if (isRangeFilter(value)) {
+        if (value.gte !== undefined) {
+          params.push(value.gte);
+          conditions.push(`${key} >= $${params.length}`);
+        }
+        if (value.lte !== undefined) {
+          params.push(value.lte);
+          conditions.push(`${key} <= $${params.length}`);
+        }
+        continue;
+      }
       params.push(value);
       conditions.push(`${key} = $${params.length}`);
     }
