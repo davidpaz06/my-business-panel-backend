@@ -8,6 +8,7 @@ import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { posQueries } from '@pos/pos.queries';
+import { purchaseQueries } from '@purchase/purchase.queries';
 import {
   CreateCreditDebitNoteDto,
   VoidCreditDebitNoteDto,
@@ -18,6 +19,7 @@ import {
 } from './interface/credit-debit-note.interface';
 
 const { creditDebitNote } = posQueries;
+const { supplierCredits } = purchaseQueries;
 
 /**
  * Notas de credito/debito sobre facturas de venta (MBP_Cambios_CR_a_Venezuela.md,
@@ -69,18 +71,54 @@ export class CreditDebitNoteService {
       }
     }
 
-    const result = await this.db.query(creditDebitNote.create, [
-      tenantId,
-      dto.invoice_id,
-      dto.note_type,
-      dto.reason_kind,
-      dto.description ?? null,
-      dto.amount,
-      dto.currency_id ?? null,
-      userId,
-    ]);
+    if (dto.reason_kind === 'mercancia_danada' && dto.note_type === 'credit') {
+      const supplierAccessRes = await this.db.query(
+        supplierCredits.getSupplierAccess,
+        [dto.supplier_id],
+      );
+      const supplierAccess = supplierAccessRes.rows[0] as
+        | { supplier_id: string; tenant_id: string }
+        | undefined;
 
-    return result.rows[0];
+      if (!supplierAccess || supplierAccess.tenant_id !== tenantId) {
+        throw new NotFoundException(
+          `Proveedor ${dto.supplier_id} no encontrado.`,
+        );
+      }
+    }
+
+    const txn = await this.db.transaction();
+    try {
+      const result = await txn.query(creditDebitNote.create, [
+        tenantId,
+        dto.invoice_id,
+        dto.note_type,
+        dto.reason_kind,
+        dto.description ?? null,
+        dto.amount,
+        dto.currency_id ?? null,
+        userId,
+      ]);
+      const note = result.rows[0] as CreditDebitNote;
+
+      // Vinculo con Compras (MBP_Cambios_CR_a_Venezuela.md, seccion 5): el
+      // monto de una nota de credito por mercancia danada queda disponible
+      // como credito de proveedor, aplicable en la proxima orden de compra.
+      if (dto.reason_kind === 'mercancia_danada' && dto.note_type === 'credit') {
+        await txn.query(supplierCredits.create, [
+          tenantId,
+          dto.supplier_id,
+          note.note_id,
+          dto.amount,
+        ]);
+      }
+
+      await txn.commit();
+      return note;
+    } catch (error) {
+      await txn.rollback();
+      throw error;
+    }
   }
 
   async listByInvoice(

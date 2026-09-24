@@ -19,7 +19,7 @@ import { AccountingJournalService } from '@/contexts/finances/modules/accounting
 import { StateService } from '@/contexts/general/modules/state/state.service';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 
-const { purchase, payments, ap, catalog } = purchaseQueries;
+const { purchase, payments, ap, catalog, supplierCredits } = purchaseQueries;
 const SUPERUSER_HIERARCHY = 1;
 const INVOICE_EDITABLE_ORDER_STATUS_ID = 2; // Shipped / "enviada"
 
@@ -318,6 +318,145 @@ export class PurchaseService {
         { value: 'IN_FULL', label: 'Pago completo' },
       ],
     };
+  }
+
+  /**
+   * Creditos de proveedor disponibles (originados por notas de credito de
+   * venta por mercancia danada, ver pos_schema.credit_debit_note) que el
+   * tenant puede aplicar contra una cuenta por pagar de este proveedor.
+   */
+  async listSupplierCredits(supplierId: string, session: IUserSession) {
+    const accessResult = await this.db.query(supplierCredits.getSupplierAccess, [
+      supplierId,
+    ]);
+    const access = accessResult.rows[0] as
+      | { supplier_id: string; tenant_id: string }
+      | undefined;
+
+    if (!access) {
+      throw new NotFoundException('Proveedor no encontrado');
+    }
+    this.assertTenantAccess(access.tenant_id, session);
+
+    const result = await this.db.query(supplierCredits.listBySupplier, [
+      supplierId,
+      access.tenant_id,
+    ]);
+    return result.rows;
+  }
+
+  /**
+   * Aplica (total o parcialmente) un credito de proveedor contra el balance
+   * de una cuenta por pagar de compras. Reutiliza purchase_order_payment con
+   * el metodo dedicado 'supplier_credit' para que
+   * recalc_account_payable_on_payment() recalcule el balance -- no se toca
+   * amount_paid a mano.
+   */
+  async applySupplierCredit(
+    creditId: string,
+    purchaseAccountPayableId: string,
+    session: IUserSession,
+  ) {
+    const creditAccessResult = await this.db.query(
+      supplierCredits.getAccessById,
+      [creditId],
+    );
+    const credit = creditAccessResult.rows[0] as
+      | {
+          supplier_credit_id: string;
+          tenant_id: string;
+          supplier_id: string;
+          remaining_amount: string;
+          status: string;
+        }
+      | undefined;
+
+    if (!credit) {
+      throw new NotFoundException('Credito de proveedor no encontrado');
+    }
+    this.assertTenantAccess(credit.tenant_id, session);
+
+    if (credit.status !== 'AVAILABLE' || Number(credit.remaining_amount) <= 0) {
+      throw new BadRequestException(
+        'Este credito ya fue aplicado por completo o fue anulado',
+      );
+    }
+
+    const payableAccessResult = await this.db.query(
+      payments.getPayableAccess,
+      [purchaseAccountPayableId],
+    );
+    const payableAccess = payableAccessResult.rows[0] as
+      | { purchase_account_payable_id: string; purchase_order_id: string; tenant_id: string }
+      | undefined;
+
+    if (!payableAccess) {
+      throw new NotFoundException('Cuenta por pagar no encontrada');
+    }
+    this.assertTenantAccess(payableAccess.tenant_id, session);
+
+    const orderResult = await this.db.query(purchase.getAccessById, [
+      payableAccess.purchase_order_id,
+    ]);
+    const order = orderResult.rows[0] as { purchase_order_id: string } | undefined;
+    if (!order) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+
+    const orderDetail = await this.getPurchaseOrderById(
+      payableAccess.purchase_order_id,
+      session,
+    );
+    const balanceDue = Number((orderDetail as any)?.balance_due ?? 0);
+    if (balanceDue <= 0) {
+      throw new BadRequestException(
+        'Esta cuenta por pagar ya no tiene saldo pendiente',
+      );
+    }
+
+    const amountToApply = Math.min(Number(credit.remaining_amount), balanceDue);
+
+    const methodResult = await this.db.query(
+      supplierCredits.getSupplierCreditPaymentMethodId,
+    );
+    const paymentMethodId = methodResult.rows[0]?.payment_method_id;
+    if (!paymentMethodId) {
+      throw new BadRequestException(
+        "Metodo de pago 'supplier_credit' no esta sembrado -- ejecutar seeds/catalog/general/015",
+      );
+    }
+
+    const txn = await this.db.transaction();
+    try {
+      const paymentResult = await txn.query(payments.insertPayment, [
+        purchaseAccountPayableId,
+        amountToApply,
+        paymentMethodId,
+        null,
+        `Credito de proveedor ${creditId}`,
+      ]);
+      const paymentId = paymentResult.rows[0]?.purchase_order_payment_id;
+
+      await txn.query(supplierCredits.recordApplication, [
+        creditId,
+        purchaseAccountPayableId,
+        paymentId,
+        amountToApply,
+        session.user_id,
+      ]);
+
+      await txn.query(supplierCredits.decrementRemaining, [
+        creditId,
+        amountToApply,
+      ]);
+
+      await txn.commit();
+    } catch (error) {
+      await txn.rollback();
+      throw error;
+    }
+
+    return this.getPurchaseOrderById(payableAccess.purchase_order_id, session);
   }
 
   /** Tasa efectiva del tenant (base + diferencial) aplicada a las compras. */

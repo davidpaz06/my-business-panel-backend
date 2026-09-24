@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -15,6 +16,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateSupplierInvoiceDto } from './dto/update-supplier-invoice.dto';
+import { ApplySupplierCreditDto } from './dto/apply-supplier-credit.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
@@ -118,6 +120,37 @@ export class PurchaseController {
   @Get('payables')
   getAccountsPayable(@Session() session: IUserSession) {
     return this.purchaseService.getAccountsPayable(session);
+  }
+
+  @ApiOperation({
+    summary: 'Creditos de proveedor disponibles',
+    description:
+      'Saldo a favor originado por notas de credito de venta por mercancia danada, aplicable contra una cuenta por pagar de este proveedor.',
+  })
+  @ApiResponse({ status: 200, description: 'Creditos disponibles obtenidos' })
+  @Get('supplier-credits')
+  listSupplierCredits(
+    @Query('supplier_id') supplierId: string,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.listSupplierCredits(supplierId, session);
+  }
+
+  @ApiOperation({ summary: 'Aplicar un credito de proveedor a una cuenta por pagar' })
+  @ApiResponse({ status: 200, description: 'Credito aplicado correctamente' })
+  @ApiResponse({ status: 400, description: 'Credito ya aplicado/anulado o sin saldo pendiente' })
+  @ApiResponse({ status: 404, description: 'Credito o cuenta por pagar no encontrados' })
+  @Post('supplier-credits/:id/apply')
+  applySupplierCredit(
+    @Param('id') id: string,
+    @Body() dto: ApplySupplierCreditDto,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.applySupplierCredit(
+      id,
+      dto.purchase_account_payable_id,
+      session,
+    );
   }
 
   @ApiOperation(getThreeWayMatchingDoc.operation)

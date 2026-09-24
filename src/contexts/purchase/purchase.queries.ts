@@ -813,6 +813,67 @@ export const purchaseQueryDefs = {
     `,
   },
 
+  supplierCredits: {
+    // Proveedor debe pertenecer al tenant que crea la nota -- validado en el
+    // service antes de insertar. Ver migrations/purchase/035.
+    getSupplierAccess: `
+      SELECT supplier_id, added_by AS tenant_id
+      FROM purchase_schema.supplier
+      WHERE supplier_id = $1
+      LIMIT 1
+    `,
+
+    create: `
+      INSERT INTO purchase_schema.supplier_credit(
+        tenant_id, supplier_id, source_note_id, original_amount, remaining_amount
+      ) VALUES ($1, $2, $3, $4, $4)
+      RETURNING *
+    `,
+
+    listBySupplier: `
+      SELECT *
+      FROM purchase_schema.supplier_credit
+      WHERE supplier_id = $1
+        AND tenant_id = $2
+        AND status = 'AVAILABLE'
+      ORDER BY created_at ASC
+    `,
+
+    getAccessById: `
+      SELECT supplier_credit_id, tenant_id, supplier_id, remaining_amount, status
+      FROM purchase_schema.supplier_credit
+      WHERE supplier_credit_id = $1
+      LIMIT 1
+    `,
+
+    // La aplicacion reutiliza purchase_order_payment (metodo 'supplier_credit')
+    // para que recalc_account_payable_on_payment() recalcule el balance sin
+    // duplicar esa logica -- ver payments.insertPayment.
+    recordApplication: `
+      INSERT INTO purchase_schema.supplier_credit_application(
+        supplier_credit_id, purchase_account_payable_id, purchase_order_payment_id,
+        amount_applied, applied_by
+      ) VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `,
+
+    decrementRemaining: `
+      UPDATE purchase_schema.supplier_credit
+      SET remaining_amount = remaining_amount - $2,
+          status = CASE WHEN remaining_amount - $2 <= 0 THEN 'APPLIED' ELSE 'AVAILABLE' END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE supplier_credit_id = $1
+      RETURNING *
+    `,
+
+    getSupplierCreditPaymentMethodId: `
+      SELECT payment_method_id
+      FROM general_schema.payment_method
+      WHERE name = 'supplier_credit'
+      LIMIT 1
+    `,
+  },
+
   catalog: {
     getOrderStatuses: `
       SELECT
@@ -838,7 +899,7 @@ export const purchaseQueryDefs = {
         name,
         description
       FROM general_schema.payment_method
-      WHERE name <> 'loyalty_points'
+      WHERE name NOT IN ('loyalty_points', 'supplier_credit')
       ORDER BY payment_method_id ASC
     `,
 
