@@ -326,9 +326,10 @@ export class PurchaseService {
    * tenant puede aplicar contra una cuenta por pagar de este proveedor.
    */
   async listSupplierCredits(supplierId: string, session: IUserSession) {
-    const accessResult = await this.db.query(supplierCredits.getSupplierAccess, [
-      supplierId,
-    ]);
+    const accessResult = await this.db.query(
+      supplierCredits.getSupplierAccess,
+      [supplierId],
+    );
     const access = accessResult.rows[0] as
       | { supplier_id: string; tenant_id: string }
       | undefined;
@@ -382,12 +383,15 @@ export class PurchaseService {
       );
     }
 
-    const payableAccessResult = await this.db.query(
-      payments.getPayableAccess,
-      [purchaseAccountPayableId],
-    );
+    const payableAccessResult = await this.db.query(payments.getPayableAccess, [
+      purchaseAccountPayableId,
+    ]);
     const payableAccess = payableAccessResult.rows[0] as
-      | { purchase_account_payable_id: string; purchase_order_id: string; tenant_id: string }
+      | {
+          purchase_account_payable_id: string;
+          purchase_order_id: string;
+          tenant_id: string;
+        }
       | undefined;
 
     if (!payableAccess) {
@@ -398,7 +402,9 @@ export class PurchaseService {
     const orderResult = await this.db.query(purchase.getAccessById, [
       payableAccess.purchase_order_id,
     ]);
-    const order = orderResult.rows[0] as { purchase_order_id: string } | undefined;
+    const order = orderResult.rows[0] as
+      | { purchase_order_id: string }
+      | undefined;
     if (!order) {
       throw new NotFoundException('Orden de compra no encontrada');
     }
@@ -407,7 +413,7 @@ export class PurchaseService {
       payableAccess.purchase_order_id,
       session,
     );
-    const balanceDue = Number((orderDetail as any)?.balance_due ?? 0);
+    const balanceDue = Number(orderDetail?.balance_due ?? 0);
     if (balanceDue <= 0) {
       throw new BadRequestException(
         'Esta cuenta por pagar ya no tiene saldo pendiente',

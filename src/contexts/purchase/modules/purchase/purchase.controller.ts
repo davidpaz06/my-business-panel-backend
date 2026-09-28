@@ -136,10 +136,18 @@ export class PurchaseController {
     return this.purchaseService.listSupplierCredits(supplierId, session);
   }
 
-  @ApiOperation({ summary: 'Aplicar un credito de proveedor a una cuenta por pagar' })
+  @ApiOperation({
+    summary: 'Aplicar un credito de proveedor a una cuenta por pagar',
+  })
   @ApiResponse({ status: 200, description: 'Credito aplicado correctamente' })
-  @ApiResponse({ status: 400, description: 'Credito ya aplicado/anulado o sin saldo pendiente' })
-  @ApiResponse({ status: 404, description: 'Credito o cuenta por pagar no encontrados' })
+  @ApiResponse({
+    status: 400,
+    description: 'Credito ya aplicado/anulado o sin saldo pendiente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Credito o cuenta por pagar no encontrados',
+  })
   @Post('supplier-credits/:id/apply')
   applySupplierCredit(
     @Param('id') id: string,
