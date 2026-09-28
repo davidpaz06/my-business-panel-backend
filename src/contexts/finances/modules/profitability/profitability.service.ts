@@ -3,6 +3,7 @@ import Database from '@crane-technologies/database/dist/components/Database';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import {
+  expenseCategoryComponents,
   expenseComponents,
   returnsComponents,
   salesComponents,
@@ -11,6 +12,7 @@ import {
 import {
   BranchRow,
   BucketUnit,
+  ExpenseCategoryComponentRow,
   ExpenseComponentRow,
   ProfitabilityInterval,
   ProfitabilityRawData,
@@ -56,13 +58,19 @@ export class ProfitabilityService {
       branchFilter,
     ];
 
-    const [branchesResult, salesResult, returnsResult, expensesResult] =
-      await Promise.all([
-        this.db.query(tenantBranches, tenantParams),
-        this.db.query(salesComponents, bucketParams),
-        this.db.query(returnsComponents, bucketParams),
-        this.db.query(expenseComponents, bucketParams),
-      ]);
+    const [
+      branchesResult,
+      salesResult,
+      returnsResult,
+      expensesResult,
+      expenseCategoriesResult,
+    ] = await Promise.all([
+      this.db.query(tenantBranches, tenantParams),
+      this.db.query(salesComponents, bucketParams),
+      this.db.query(returnsComponents, bucketParams),
+      this.db.query(expenseComponents, bucketParams),
+      this.db.query(expenseCategoryComponents, bucketParams),
+    ]);
 
     return {
       interval: resolvedInterval,
@@ -72,6 +80,8 @@ export class ProfitabilityService {
       sales: salesResult.rows as SalesComponentRow[],
       returns: returnsResult.rows as ReturnsComponentRow[],
       expenses: expensesResult.rows as ExpenseComponentRow[],
+      expense_categories:
+        expenseCategoriesResult.rows as ExpenseCategoryComponentRow[],
     };
   }
 }

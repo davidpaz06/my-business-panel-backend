@@ -4,6 +4,7 @@ export interface CashFlowSummaryItem {
   direction: 'entrada' | 'salida';
   currency_id: number;
   movement_type: string;
+  branch_id: string | null;
   total_amount: string;
 }
 
@@ -11,6 +12,7 @@ export interface CashFlowBucket {
   bucket_start: string;
   direction: 'entrada' | 'salida';
   currency_id: number;
+  branch_id: string | null;
   total_amount: string;
 }
 
