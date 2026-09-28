@@ -19,7 +19,7 @@ import {
 } from './interface/credit-debit-note.interface';
 
 const { creditDebitNote } = posQueries;
-const { supplierCredits } = purchaseQueries;
+const { supplierCredits, catalog } = purchaseQueries;
 
 /**
  * Notas de credito/debito sobre facturas de venta (MBP_Cambios_CR_a_Venezuela.md,
@@ -71,6 +71,12 @@ export class CreditDebitNoteService {
       }
     }
 
+    // El credito de proveedor vive en purchase_schema, cuya moneda base es
+    // USD (ver utils/purchase.ts BASE_CURRENCY en el frontend) -- pero
+    // credit_debit_note.amount se captura en bolivares, igual que el resto
+    // de pos_schema (moneda base historica). Sin convertir aqui, el credito
+    // quedaria mezclando Bs. con el balance en USD de la cuenta por pagar.
+    let supplierCreditUsdAmount: string | null = null;
     if (dto.reason_kind === 'mercancia_danada' && dto.note_type === 'credit') {
       const supplierAccessRes = await this.db.query(
         supplierCredits.getSupplierAccess,
@@ -85,6 +91,19 @@ export class CreditDebitNoteService {
           `Proveedor ${dto.supplier_id} no encontrado.`,
         );
       }
+
+      const rateRes = await this.db.query(catalog.getLatestExchangeRate, [
+        tenantId,
+      ]);
+      const effectiveRate = rateRes.rows[0]?.effective_rate;
+      if (!effectiveRate || Number(effectiveRate) <= 0) {
+        throw new BadRequestException(
+          'No hay tasa de cambio USD -> Bs. configurada para el tenant; no se puede calcular el credito de proveedor en dolares.',
+        );
+      }
+      supplierCreditUsdAmount = new Decimal(dto.amount)
+        .div(effectiveRate)
+        .toFixed(2);
     }
 
     const txn = await this.db.transaction();
@@ -104,12 +123,12 @@ export class CreditDebitNoteService {
       // Vinculo con Compras (MBP_Cambios_CR_a_Venezuela.md, seccion 5): el
       // monto de una nota de credito por mercancia danada queda disponible
       // como credito de proveedor, aplicable en la proxima orden de compra.
-      if (dto.reason_kind === 'mercancia_danada' && dto.note_type === 'credit') {
+      if (supplierCreditUsdAmount !== null) {
         await txn.query(supplierCredits.create, [
           tenantId,
           dto.supplier_id,
           note.note_id,
-          dto.amount,
+          supplierCreditUsdAmount,
         ]);
       }
 
