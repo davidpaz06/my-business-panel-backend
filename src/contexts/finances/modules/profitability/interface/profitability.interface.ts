@@ -41,6 +41,15 @@ export interface ExpenseComponentRow {
   amount: string;
 }
 
+export interface ExpenseCategoryComponentRow {
+  branch_id: string;
+  bucket_start: string;
+  currency_id: number;
+  category_id: string | null;
+  category_name: string | null;
+  amount: string;
+}
+
 export interface ProfitabilityRawData {
   interval: ProfitabilityInterval;
   range_start: string;
@@ -49,4 +58,5 @@ export interface ProfitabilityRawData {
   sales: SalesComponentRow[];
   returns: ReturnsComponentRow[];
   expenses: ExpenseComponentRow[];
+  expense_categories: ExpenseCategoryComponentRow[];
 }

@@ -71,6 +71,27 @@ export const expenseComponents = `
   GROUP BY e.branch_id, bucket_start, COALESCE(e.currency_id, 1)
 `;
 
+// Desglose de gastos por categoria, agrupado por (sucursal, bucket, moneda, categoria).
+// Complementa expenseComponents (que trae solo el total) para mostrar el detalle
+// debajo de la grafica de rentabilidad. LEFT JOIN preserva gastos sin categoria
+// asignada (category_name = NULL -> "Sin categoria" en el frontend).
+export const expenseCategoryComponents = `
+  SELECT
+    e.branch_id,
+    date_trunc($2, e.expense_date)                       AS bucket_start,
+    COALESCE(e.currency_id, 1)                           AS currency_id,
+    ec.category_id                                       AS category_id,
+    ec.name                                               AS category_name,
+    SUM(e.total_amount)                                  AS amount
+  FROM accounting_schema.expense e
+  LEFT JOIN accounting_schema.expense_category ec
+    ON ec.category_id = e.category_id
+  WHERE e.tenant_id = $1
+    AND e.expense_date >= $3
+    AND ($4::uuid IS NULL OR e.branch_id = $4::uuid)
+  GROUP BY e.branch_id, bucket_start, COALESCE(e.currency_id, 1), ec.category_id, ec.name
+`;
+
 // Sucursales del tenant (para generar los N graficos aunque una sede no tenga ventas).
 // $2 = branch_id (uuid|null) -> si se filtra por sucursal, solo se devuelve esa.
 export const tenantBranches = `

@@ -19,6 +19,7 @@ export class CashFlowController {
       dto.startDate,
       dto.endDate,
       dto.groupBy,
+      dto.branchId,
       session,
     );
   }

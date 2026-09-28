@@ -30,10 +30,12 @@ export class CashFlowService {
     startDate: string | undefined,
     endDate: string | undefined,
     groupBy: CashFlowGroupBy | undefined,
+    branchId: string | undefined,
     session: IUserSession,
   ): Promise<CashFlowData> {
     const resolvedGroupBy = groupBy ?? DEFAULT_GROUP_BY;
     const bucketUnit = resolveBucketUnit(resolvedGroupBy);
+    const branchFilter = branchId ?? null;
 
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -45,17 +47,20 @@ export class CashFlowService {
         session.tenant_id,
         resolvedStart,
         resolvedEnd,
+        branchFilter,
       ]),
       this.db.query(cashFlowBucketsQuery, [
         session.tenant_id,
         resolvedStart,
         resolvedEnd,
+        branchFilter,
         bucketUnit,
       ]),
       this.db.query(cashFlowAvailableQuery, [
         session.tenant_id,
         HISTORY_START,
         now.toISOString(),
+        null,
       ]),
     ]);
 
