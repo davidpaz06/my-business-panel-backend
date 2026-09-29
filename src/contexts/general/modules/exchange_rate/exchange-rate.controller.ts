@@ -2,8 +2,8 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
-import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
-import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
+import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
+import { RequiredLevel } from '@/common/decorators/level_metadata.decorator';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 
@@ -46,16 +46,16 @@ export class ExchangeRateController {
    * de tenant, y en produccion se carga automaticamente via BcvRateSyncService.
    */
   @Post('base')
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('superuser')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(4)
   setBase(@Body() dto: SetBaseRateDto) {
     return this.service.setBaseRate(dto);
   }
 
   /** Carga el diferencial del tenant. 0 lo restablece. */
   @Post('delta')
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'superuser')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(3)
   setDelta(@Body() dto: SetDeltaDto, @Session() user: IUserSession) {
     return this.service.setDelta(user.tenant_id, user.user_id, dto);
   }

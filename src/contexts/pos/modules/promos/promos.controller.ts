@@ -19,8 +19,8 @@ import { PromosService } from './promos.service';
 import { NewPromoDto } from './dto/newPromo.dto';
 import { UpdatePromotionDto } from './dto/updatePromo.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
-import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
-import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
+import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
+import { RequiredLevel } from '@/common/decorators/level_metadata.decorator';
 import {
   getTenantPromosDoc,
   getPromoInfoDoc,
@@ -93,8 +93,8 @@ export class PromosController {
   @ApiResponse(createPromoWithRuleDoc.responses[400])
   @ApiResponse(createPromoWithRuleDoc.responses[401])
   @Post()
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'superuser')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(3)
   createPromoWithRule(@Body() newPromoDto: NewPromoDto) {
     return this.promosService.createPromoWithRule(newPromoDto);
   }
@@ -105,8 +105,8 @@ export class PromosController {
   @ApiResponse(updatePromotionDoc.responses[401])
   @ApiResponse(updatePromotionDoc.responses[404])
   @Patch(':id')
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'superuser')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(3)
   updatePromotion(
     @Param('id') id: string,
     @Body() updatePromoDto: UpdatePromotionDto,
@@ -119,8 +119,8 @@ export class PromosController {
   @ApiResponse(deletePromotionDoc.responses[401])
   @ApiResponse(deletePromotionDoc.responses[404])
   @Delete(':id')
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'superuser')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(3)
   deletePromotion(@Param('id') id: string) {
     return this.promosService.deletePromotion(id);
   }

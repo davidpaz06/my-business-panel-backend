@@ -1,0 +1,46 @@
+### ============================================================
+### AUTH MODULE — LOGIN / REFRESH / LOGOUT
+### Servidor: http://localhost:3000
+###
+### Usa el usuario ya sembrado por seeds/dev/001-dev-superuser-setup.sql
+### (admin@distribuidora.cr). No crea filas nuevas: login no inserta,
+### refresh/logout solo tocan refresh_token.revoked, que vuelve a un
+### estado valido para la siguiente corrida completa de la suite.
+###
+### Requiere REST Client (VS Code). Ejecuta 1 -> 5 en orden.
+### ============================================================
+
+@baseUrl = http://localhost:3000
+
+### 1. Login con usuario de prueba
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@distribuidora.cr",
+  "password": "Admin1234!"
+}
+
+### 2. Refresh usando la cookie recien seteada por el login anterior
+# @name refresh
+POST {{baseUrl}}/auth/refresh
+
+### 3. Verificar que el access token nuevo funciona
+GET {{baseUrl}}/user
+
+### 4. Logout — debe revocar todos los refresh tokens del usuario
+# @name logout
+POST {{baseUrl}}/auth/logout
+
+### 5. Reintentar refresh tras logout — debe fallar (401)
+POST {{baseUrl}}/auth/refresh
+
+### ============================================================
+### Verificacion manual en BD tras una corrida completa (1 -> 5):
+###
+###   SELECT revoked, expires_at FROM general_schema.refresh_token
+###   WHERE user_id = 'a0000001-0000-0000-0000-000000000003';
+###
+### No debe quedar ninguna fila con revoked = false.
+### ============================================================

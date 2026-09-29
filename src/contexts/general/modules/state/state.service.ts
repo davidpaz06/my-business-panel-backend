@@ -90,5 +90,18 @@ export class StateService implements OnModuleInit {
       parseInt(process.env.PASSWORD_SALT_ROUNDS as string),
     );
     this.constants.set('JWT_EXPIRES_IN', process.env.JWT_EXPIRES_IN);
+    this.constants.set(
+      'JWT_ACCESS_SECRET',
+      process.env.JWT_ACCESS_SECRET ?? process.env.JWT_SECRET,
+    );
+    this.constants.set(
+      'JWT_ACCESS_EXPIRATION',
+      process.env.JWT_ACCESS_EXPIRATION ?? '15m',
+    );
+    this.constants.set('JWT_REFRESH_SECRET', process.env.JWT_REFRESH_SECRET);
+    this.constants.set(
+      'JWT_REFRESH_EXPIRATION',
+      process.env.JWT_REFRESH_EXPIRATION ?? '7d',
+    );
   }
 }

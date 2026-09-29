@@ -11,8 +11,8 @@ import { ApiTags } from '@nestjs/swagger';
 import { ParametersService } from './parameters.service';
 import { CreatePayrollParameterDto } from './dto/payroll-parameter.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
-import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
-import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
+import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
+import { RequiredLevel } from '@/common/decorators/level_metadata.decorator';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 
@@ -48,8 +48,8 @@ export class ParametersController {
   }
 
   @Post()
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'superuser')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(3)
   create(
     @Body() body: CreatePayrollParameterDto,
     @Session() user: IUserSession,

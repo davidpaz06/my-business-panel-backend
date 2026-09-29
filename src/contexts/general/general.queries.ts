@@ -1240,6 +1240,29 @@ export const generalQueryDefs = {
       RETURNING special_code_id
     `,
   },
+
+  refreshToken: {
+    create: `
+      INSERT INTO general_schema.refresh_token (user_id, token_hash, expires_at)
+      VALUES ($1, $2, $3)
+      RETURNING refresh_token_id
+    `,
+    activeByUser: `
+      SELECT refresh_token_id, token_hash
+      FROM general_schema.refresh_token
+      WHERE user_id = $1 AND revoked = false AND expires_at > NOW()
+    `,
+    revokeById: `
+      UPDATE general_schema.refresh_token
+      SET revoked = true
+      WHERE refresh_token_id = $1
+    `,
+    revokeAllByUser: `
+      UPDATE general_schema.refresh_token
+      SET revoked = true
+      WHERE user_id = $1 AND revoked = false
+    `,
+  },
 };
 
 export const generalQueries = createQueries(generalQueryDefs);

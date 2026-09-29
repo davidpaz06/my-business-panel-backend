@@ -10,8 +10,8 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
-import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
-import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
+import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
+import { RequiredLevel } from '@/common/decorators/level_metadata.decorator';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { AccountsReceivableService } from './accounts-receivable.service';
@@ -47,8 +47,8 @@ export class AccountsReceivableController {
   }
 
   @ApiOperation({ summary: 'Registrar cobro sobre una cuenta por cobrar' })
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'manager')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(2)
   @Post('collection')
   registerCollection(
     @Body() dto: CreateCollectionDto,
@@ -58,8 +58,8 @@ export class AccountsReceivableController {
   }
 
   @ApiOperation({ summary: 'Actualizar cobro registrado' })
-  @UseGuards(RoleAuthorizationGuard)
-  @RequiredRole('admin', 'manager')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(2)
   @Patch('collection/:id')
   updateCollection(
     @Param('id') id: string,
