@@ -1,10 +1,16 @@
-/** Tasa vigente aplicable a un tenant: base global + su diferencial. */
+/**
+ * Tasa vigente aplicable a un tenant. Con auto_update: base global + su
+ * diferencial. Sin auto_update: su ultima tasa manual (manual_rate).
+ */
 export interface EffectiveExchangeRate {
-  base_rate: string;
+  base_rate: string | null;
   delta: string;
-  effective_rate: string;
-  base_at: string;
+  effective_rate: string | null;
+  base_at: string | null;
   delta_at: string | null;
+  auto_update: boolean;
+  manual_rate: string | null;
+  manual_at: string | null;
   from_currency_id: number;
   to_currency_id: number;
 }

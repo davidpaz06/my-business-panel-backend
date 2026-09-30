@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
@@ -10,6 +10,8 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { ExchangeRateService } from './exchange-rate.service';
 import { SetBaseRateDto } from './dto/set-base-rate.dto';
 import { SetDeltaDto } from './dto/set-delta.dto';
+import { SetManualRateDto } from './dto/set-manual-rate.dto';
+import { SetAutoUpdateDto } from './dto/set-auto-update.dto';
 
 /**
  * Tasa de cambio USD -> VES. Ledger inmutable: no hay PATCH ni DELETE --
@@ -58,5 +60,28 @@ export class ExchangeRateController {
   @RequiredLevel(3)
   setDelta(@Body() dto: SetDeltaDto, @Session() user: IUserSession) {
     return this.service.setDelta(user.tenant_id, user.user_id, dto);
+  }
+
+  /**
+   * Activa/desactiva la actualizacion automatica de tasa del tenant. Con
+   * auto_update = false el tenant ignora la tasa base (y al job BCV).
+   */
+  @Put('auto-update')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(3)
+  setAutoUpdate(@Body() dto: SetAutoUpdateDto, @Session() user: IUserSession) {
+    return this.service.setAutoUpdate(
+      user.tenant_id,
+      user.user_id,
+      dto.auto_update,
+    );
+  }
+
+  /** Carga la tasa manual del tenant (aplica con auto_update = false). */
+  @Post('manual')
+  @UseGuards(LevelAuthorizationGuard)
+  @RequiredLevel(3)
+  setManualRate(@Body() dto: SetManualRateDto, @Session() user: IUserSession) {
+    return this.service.setManualRate(user.tenant_id, user.user_id, dto);
   }
 }

@@ -4,6 +4,7 @@ import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { generalQueries } from '@general/general.queries';
 import { SetBaseRateDto } from './dto/set-base-rate.dto';
 import { SetDeltaDto } from './dto/set-delta.dto';
+import { SetManualRateDto } from './dto/set-manual-rate.dto';
 import {
   EffectiveExchangeRate,
   ExchangeRateLedgerEntry,
@@ -37,13 +38,52 @@ export class ExchangeRateService {
     ]);
     const row = result.rows[0];
 
-    if (!row || row.base_rate === null) {
+    if (!row || row.effective_rate === null) {
       throw new BadRequestException(
         'No hay tasa de cambio base cargada. Registre la tasa USD -> VES antes de operar.',
       );
     }
 
     return row;
+  }
+
+  /**
+   * Activa o desactiva la actualizacion automatica de tasa del tenant. El
+   * job BCV solo alimenta la tasa base global; un tenant con auto_update =
+   * false ignora esa base y opera con su tasa manual. No se puede desactivar
+   * sin tener antes una tasa manual cargada.
+   */
+  async setAutoUpdate(tenantId: string, userId: string, autoUpdate: boolean) {
+    if (!autoUpdate) {
+      const manual = await this.db.query(exchangeRate.hasManualRate, [
+        tenantId,
+      ]);
+      if (manual.rows.length === 0) {
+        throw new BadRequestException(
+          'Registre una tasa manual antes de desactivar la actualizacion automatica.',
+        );
+      }
+    }
+
+    const result = await this.db.query(exchangeRate.upsertAutoUpdate, [
+      tenantId,
+      autoUpdate,
+      userId,
+    ]);
+    return result.rows[0];
+  }
+
+  /**
+   * Carga la tasa manual del tenant. Agrega una fila al ledger; solo aplica
+   * mientras el tenant tenga la actualizacion automatica desactivada.
+   */
+  async setManualRate(tenantId: string, userId: string, dto: SetManualRateDto) {
+    const result = await this.db.query(exchangeRate.insertManualRate, [
+      tenantId,
+      dto.rate,
+      userId,
+    ]);
+    return result.rows[0];
   }
 
   /** Historial completo del tenant: cada cambio de tasa base o de delta. */

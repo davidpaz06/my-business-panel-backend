@@ -316,6 +316,7 @@ export const generalQueryDefs = {
     effectiveForTenant: `
       SELECT
         r.base_rate, r.delta, r.effective_rate, r.base_at, r.delta_at,
+        r.auto_update, r.manual_rate, r.manual_at,
         (SELECT currency_id FROM general_schema.currency WHERE currency_code = 'USD') AS from_currency_id,
         (SELECT currency_id FROM general_schema.currency WHERE currency_code = 'VES') AS to_currency_id
       FROM general_schema.get_effective_exchange_rate($1) r
@@ -334,6 +335,23 @@ export const generalQueryDefs = {
         (tenant_id, delta, source, created_by)
       VALUES ($1, $2, COALESCE($3, 'MANUAL'), $4)
       RETURNING delta_id, tenant_id, delta, effective_at, source, created_at
+    `,
+    insertManualRate: `
+      INSERT INTO general_schema.tenant_manual_rate (tenant_id, rate, created_by)
+      VALUES ($1, $2, $3)
+      RETURNING manual_rate_id, tenant_id, rate, effective_at, created_at
+    `,
+    hasManualRate: `
+      SELECT 1 FROM general_schema.tenant_manual_rate WHERE tenant_id = $1 LIMIT 1
+    `,
+    upsertAutoUpdate: `
+      INSERT INTO general_schema.tenant_exchange_config (tenant_id, auto_update, updated_by)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (tenant_id) DO UPDATE
+        SET auto_update = EXCLUDED.auto_update,
+            updated_by = EXCLUDED.updated_by,
+            updated_at = CURRENT_TIMESTAMP
+      RETURNING tenant_id, auto_update, updated_at
     `,
     currentBase: `
       SELECT exchange_rate_id, rate, effective_at, source, created_at
