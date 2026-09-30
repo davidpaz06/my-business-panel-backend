@@ -688,6 +688,33 @@ export class PurchaseService {
     return this.getPurchaseOrderById(access.purchase_order_id, session);
   }
 
+  /**
+   * Cancela una recepcion iniciada por error mientras sigue PENDING -- borra
+   * el goods_receipt (cascada se lleva sus items) para poder reintentar
+   * limpio con startGoodsReceipt. No afecta el status de la orden (sigue
+   * "enviada").
+   */
+  async cancelGoodsReceipt(goodsReceiptId: string, session: IUserSession) {
+    const access = await this.getGoodsReceiptAccessOrThrow(goodsReceiptId);
+    this.assertTenantAccess(access.tenant_id, session);
+
+    if (access.status !== 'PENDING') {
+      throw new ForbiddenException(
+        'Solo se puede cancelar una recepcion mientras esta PENDING',
+      );
+    }
+
+    try {
+      await this.db.query(goodsReceipt.cancel, [goodsReceiptId]);
+    } catch (e: any) {
+      throw new BadRequestException(
+        'Error al cancelar la recepcion: ' + (e.detail || e.message),
+      );
+    }
+
+    return this.getPurchaseOrderById(access.purchase_order_id, session);
+  }
+
   async getGoodsReceipt(goodsReceiptId: string, session: IUserSession) {
     const access = await this.getGoodsReceiptAccessOrThrow(goodsReceiptId);
     this.assertTenantAccess(access.tenant_id, session);

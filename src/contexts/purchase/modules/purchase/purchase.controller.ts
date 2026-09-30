@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Patch,
+  Delete,
   Param,
   Query,
   UseGuards,
@@ -229,6 +230,24 @@ export class PurchaseController {
     @Session() session: IUserSession,
   ) {
     return this.purchaseService.confirmGoodsReceipt(goodsReceiptId, session);
+  }
+
+  @ApiOperation({
+    summary: 'Cancelar una recepcion de mercancia iniciada por error',
+    description:
+      'Solo mientras la recepcion esta PENDING. Borra el checklist para poder reiniciar la recepcion limpio.',
+  })
+  @ApiResponse({ status: 200, description: 'Recepcion cancelada' })
+  @ApiResponse({
+    status: 403,
+    description: 'La recepcion ya fue confirmada, no se puede cancelar',
+  })
+  @Delete('goods-receipt/:goodsReceiptId')
+  cancelGoodsReceipt(
+    @Param('goodsReceiptId') goodsReceiptId: string,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.cancelGoodsReceipt(goodsReceiptId, session);
   }
 
   @ApiOperation({ summary: 'Reportar una discrepancia con el proveedor' })

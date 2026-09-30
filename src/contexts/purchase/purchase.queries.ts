@@ -536,6 +536,10 @@ export const purchaseQueryDefs = {
       SELECT purchase_schema.confirm_goods_receipt($1)
     `,
 
+    cancel: `
+      SELECT purchase_schema.cancel_goods_receipt($1)
+    `,
+
     getWithItems: `
       SELECT
         gr.goods_receipt_id,

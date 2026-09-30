@@ -421,6 +421,18 @@ GET {{baseUrl}}/purchase/goods-receipt/{{goodsReceiptId}}
 
 ###
 
+### 6b.2b Cancelar por error y reiniciar (opcional, solo mientras PENDING)
+### → Borra el goods_receipt + items; orden queda en status 2 sin cambios
+DELETE {{baseUrl}}/purchase/goods-receipt/{{goodsReceiptId}}
+
+###
+
+### 6b.2c Reiniciar tras cancelar
+### ✅ Copia el nuevo goods_receipt_id → pega en @goodsReceiptId
+POST {{baseUrl}}/purchase/{{purchaseOrderId}}/goods-receipt
+
+###
+
 ### 6b.3 Corregir cantidad recibida (simula mercancia incompleta)
 ### → Ajusta product_variant_id/quantity_received segun lo que devolvio 6b.2
 PATCH {{baseUrl}}/purchase/goods-receipt/{{goodsReceiptId}}
