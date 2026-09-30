@@ -385,6 +385,8 @@ export const purchaseQueryDefs = {
             SELECT
               gr.goods_receipt_id,
               gr.received_date,
+              gr.status,
+              gr.confirmed_at,
               gr.subtotal_amount,
               gr.tax_amount,
               gr.total_amount,
@@ -500,6 +502,76 @@ export const purchaseQueryDefs = {
       ) gri ON TRUE
       WHERE twm.purchase_order_id = $1
       ORDER BY twm.created_at DESC
+      LIMIT 1
+    `,
+  },
+
+  goodsReceipt: {
+    start: `
+      SELECT purchase_schema.start_goods_receipt($1) AS goods_receipt_id
+    `,
+
+    getAccess: `
+      SELECT
+        gr.goods_receipt_id,
+        gr.purchase_order_id,
+        gr.status,
+        b.tenant_id
+      FROM purchase_schema.goods_receipt gr
+      INNER JOIN purchase_schema.purchase_order po
+        ON po.purchase_order_id = gr.purchase_order_id
+      INNER JOIN inventory_schema.warehouse w
+        ON w.warehouse_id = po.warehouse_id
+      INNER JOIN general_schema.branch b
+        ON b.branch_id = w.branch_id
+      WHERE gr.goods_receipt_id = $1
+      LIMIT 1
+    `,
+
+    updateItems: `
+      SELECT purchase_schema.update_goods_receipt_items($1, $2, $3)
+    `,
+
+    confirm: `
+      SELECT purchase_schema.confirm_goods_receipt($1)
+    `,
+
+    getWithItems: `
+      SELECT
+        gr.goods_receipt_id,
+        gr.purchase_order_id,
+        gr.received_date,
+        gr.status,
+        gr.confirmed_at,
+        gr.subtotal_amount,
+        gr.tax_amount,
+        gr.total_amount,
+        gr.created_at,
+        gr.updated_at,
+        COALESCE((
+          SELECT json_agg(item_row ORDER BY item_row.created_at)
+          FROM (
+            SELECT
+              gri.goods_receipt_item_id,
+              gri.product_variant_id,
+              pv.sku,
+              pv.variant_name,
+              gri.quantity_received,
+              poi.quantity_ordered,
+              gri.created_at,
+              gri.updated_at
+            FROM purchase_schema.goods_receipt_item gri
+            JOIN general_schema.product_variant pv
+              ON pv.tenant_id = gri.tenant_id
+             AND pv.product_variant_id = gri.product_variant_id
+            LEFT JOIN purchase_schema.purchase_order_item poi
+              ON poi.purchase_order_id = gr.purchase_order_id
+             AND poi.product_variant_id = gri.product_variant_id
+            WHERE gri.goods_receipt_id = gr.goods_receipt_id
+          ) item_row
+        ), '[]'::json) AS items
+      FROM purchase_schema.goods_receipt gr
+      WHERE gr.goods_receipt_id = $1
       LIMIT 1
     `,
   },

@@ -7,10 +7,11 @@
 ###   3. Proveedor
 ###   4. Crear orden de compra (PO + items + invoice + payable)
 ###   5. Pagos: parcial → completo
-###   6. Transición de estado: Pending → Shipped → Delivered
-###      - Delivered activa trigger: crea goods_receipt + items
-###      - Trigger llama execute_three_way_matching automáticamente
-###      - PurchaseService registra entradas en inventory_log
+###   6. Transición de estado: Pending → Shipped
+###   6b. Recepción de mercancía: start → corregir items → confirm
+###      - confirm mueve la orden a Delivered, aplica inventario desde lo
+###        realmente recibido, corre three-way matching y puede abrir una
+###        disputa automática si hay discrepancia
 ###   7. Verificación: three-way matching + inventario actualizado
 ###
 ### INSTRUCCIONES:
@@ -39,6 +40,7 @@
 @supplierId        = FILL_ME
 @purchaseOrderId   = FILL_ME
 @accountPayableId  = FILL_ME
+@goodsReceiptId    = FILL_ME
 
 
 POST {{baseUrl}}/auth/login
@@ -365,18 +367,11 @@ GET {{baseUrl}}/purchase/{{purchaseOrderId}}
 ### Máquina de estados:
 ###   1 (Pending) → 2 (Shipped) → 3 (Delivered) → terminal
 ###
-### Al llegar a Delivered (3):
-###   DB Trigger: create_goods_receipt()
-###     → INSERT goods_receipt (subtotal y tax desde purchase_account_payable)
-###     → INSERT goods_receipt_item x2 (copia quantity_ordered de cada PO item)
-###     → CALL execute_three_way_matching(purchase_order_id, goods_receipt_id)
-###        → Compara subtotales, tax, totales, y cantidades
-###        → INSERT three_way_matching (amounts_matched, quantities_matched, is_matched)
-###
-###   PurchaseService.updateOrderStatus():
-###     → Llama receiveStockFromPurchase() por cada item del PO
-###        → UPSERT inventory (stock += quantity_ordered)
-###        → INSERT inventory_log (type_id=1=IN)
+### Delivered (3) ya NO se alcanza con PATCH /purchase/:id/status -- un guard
+### trigger en la DB rechaza cualquier UPDATE directo a status 3. Es efecto
+### secundario de confirmar la recepcion de mercancia (FASE 6b), para que
+### inventario y three-way matching corran contra lo que realmente llego,
+### no contra las cantidades originales de la orden.
 ### ============================================================
 
 ### 6.1 Transición: Pending (1) → Shipped (2)
@@ -397,10 +392,8 @@ GET {{baseUrl}}/purchase/{{purchaseOrderId}}
 
 ###
 
-### 6.3 Transición: Shipped (2) → Delivered (3)
-### ⚡ Este request dispara automáticamente:
-###    - DB trigger: goods_receipt + three_way_matching
-###    - PurchaseService: inventory update por cada item
+### 6.2b Intentar saltarse la recepcion (debe fallar 400)
+### → El guard trigger rechaza cualquier UPDATE directo a status 3
 PATCH {{baseUrl}}/purchase/{{purchaseOrderId}}/status
 Content-Type: application/json
 
@@ -412,11 +405,69 @@ Content-Type: application/json
 
 
 ### ============================================================
+### FASE 6b — RECEPCION DE MERCANCIA (start → editar → confirm)
+### ============================================================
+
+### 6b.1 Iniciar recepcion
+### → Orden debe estar en status 2 (Shipped). Crea goods_receipt (PENDING) +
+###   goods_receipt_item precargado como checklist desde purchase_order_item.
+### ✅ Copia goods_receipt_id → pega en @goodsReceiptId abajo
+POST {{baseUrl}}/purchase/{{purchaseOrderId}}/goods-receipt
+
+###
+
+### 6b.2 Ver el checklist precargado
+GET {{baseUrl}}/purchase/goods-receipt/{{goodsReceiptId}}
+
+###
+
+### 6b.3 Corregir cantidad recibida (simula mercancia incompleta)
+### → Ajusta product_variant_id/quantity_received segun lo que devolvio 6b.2
+PATCH {{baseUrl}}/purchase/goods-receipt/{{goodsReceiptId}}
+Content-Type: application/json
+
+{
+  "items": [
+    { "product_variant_id": "{{variantId}}", "quantity_received": 99 },
+    { "product_variant_id": "{{variantId2}}", "quantity_received": 200 }
+  ]
+}
+
+###
+
+### 6b.4 Confirmar recepcion
+### ⚡ Este request dispara:
+###    - DB: bloquea edicion, aplica inventario (desde goods_receipt_item),
+###      corre three-way matching, abre disputa automatica si hay discrepancia,
+###      y recien ahi mueve la orden a status 3 (Delivered)
+POST {{baseUrl}}/purchase/goods-receipt/{{goodsReceiptId}}/confirm
+
+###
+
+### 6b.5 Intentar editar tras confirmar (debe fallar 403)
+PATCH {{baseUrl}}/purchase/goods-receipt/{{goodsReceiptId}}
+Content-Type: application/json
+
+{
+  "items": []
+}
+
+###
+
+### 6b.6 Ver disputa automatica abierta por la discrepancia de 6b.3
+### → Esperar: dispute_type=MISSING_GOODS, status=OPEN
+GET {{baseUrl}}/purchase/{{purchaseOrderId}}/disputes
+
+###
+
+
+### ============================================================
 ### FASE 7 — VERIFICACIÓN: THREE-WAY MATCHING + INVENTARIO
 ### ============================================================
 
 ### 7.1 Consultar resultado del three-way matching
-### → Esperar: amounts_matched=true, quantities_matched=true, is_matched=true
+### → Esperar: amounts_matched=true (factura sin cambios), quantities_matched=false
+###   (99 recibidos vs 100 pedidos/facturados), is_matched=false
 ### → Revisar amount_comparison y quantity_comparison para detalles
 GET {{baseUrl}}/purchase/{{purchaseOrderId}}/matching
 
@@ -429,8 +480,8 @@ GET {{baseUrl}}/purchase/{{purchaseOrderId}}
 ###
 
 ### 7.3 Verificar stock en bodega tras Delivered
-### → Esperar:
-###    - PROD-001 (Cuaderno):   stock = 100 unidades
+### → Esperar (inventario aplicado desde goods_receipt_item, no desde la orden):
+###    - PROD-001 (Cuaderno):   stock = 99 unidades (99 recibidos, ver 6b.3)
 ###    - PROD-002 (Lapicero):   stock = 200 unidades
 POST {{baseUrl}}/warehouse/count
 Content-Type: application/json
@@ -443,7 +494,7 @@ Content-Type: application/json
 
 ### 7.4 Consultar log de movimientos de inventario
 ### → Esperar 2 entradas tipo IN:
-###    - product_variant_id=@variantId  / quantity=100
+###    - product_variant_id=@variantId  / quantity=99
 ###    - product_variant_id=@variantId2 / quantity=200
 GET {{baseUrl}}/warehouse/{{warehouseId}}/log
 

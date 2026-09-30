@@ -11,6 +11,9 @@ import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { UpdateSupplierInvoiceDto } from './dto/update-supplier-invoice.dto';
+import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
+import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { CreateDisputeDto } from './dto/create-dispute.dto';
 import Database from '@crane-technologies/database/dist/components/Database';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { purchaseQueries } from '@purchase/purchase.queries';
@@ -19,9 +22,19 @@ import { AccountingJournalService } from '@/contexts/finances/modules/accounting
 import { StateService } from '@/contexts/general/modules/state/state.service';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 
-const { purchase, payments, ap, catalog, supplierCredits } = purchaseQueries;
+const {
+  purchase,
+  payments,
+  ap,
+  catalog,
+  supplierCredits,
+  goodsReceipt,
+  disputes,
+} = purchaseQueries;
 const SUPERUSER_HIERARCHY = 1;
 const INVOICE_EDITABLE_ORDER_STATUS_ID = 2; // Shipped / "enviada"
+const SHIPPED_STATUS_ID = 2;
+const DELIVERED_STATUS_ID = 3;
 
 type OrderAccessRow = {
   purchase_order_id: string;
@@ -493,6 +506,12 @@ export class PurchaseService {
       (updatePurchaseDto as { purchase_order_status_id?: number })
         ?.purchase_order_status_id ?? access.purchase_order_status_id;
 
+    if (nextStatusId === DELIVERED_STATUS_ID) {
+      throw new BadRequestException(
+        'purchase_order_status_id no puede pasar a 3 (Delivered) directamente; usa el flujo de recepcion (start/update/confirm goods receipt)',
+      );
+    }
+
     await this.db.query(purchase.updateStatus, [nextStatusId, id]);
     return this.getPurchaseOrderById(id, session);
   }
@@ -506,9 +525,14 @@ export class PurchaseService {
     this.assertTenantAccess(access.tenant_id, session);
 
     const currentStatus = access.purchase_order_status_id;
+    // Status 3 (Delivered) is not a transition reachable from here anymore --
+    // it can only happen as a side effect of confirmGoodsReceipt(), so that
+    // inventory application and three-way matching always run against
+    // whatever was actually corrected during receiving, not against the
+    // original order quantities. See start/update/confirmGoodsReceipt below.
     const allowedTransitions: Record<number, number[]> = {
       1: [2, 4],
-      2: [3, 4],
+      2: [4],
       3: [],
       4: [],
     };
@@ -520,6 +544,12 @@ export class PurchaseService {
       };
     }
 
+    if (statusId === DELIVERED_STATUS_ID) {
+      throw new BadRequestException(
+        'La orden no puede pasar a "entregada" directamente; inicia la recepcion de mercancia (POST /purchase/:id/goods-receipt) y confirmala',
+      );
+    }
+
     const isAllowed = (allowedTransitions[currentStatus] || []).includes(
       statusId,
     );
@@ -529,54 +559,230 @@ export class PurchaseService {
       );
     }
 
-    if (statusId === 3) {
-      const txn = await this.db.transaction();
-      try {
-        // The status UPDATE fires purchase_schema.create_goods_receipt, which
-        // in turn calls purchase_schema.apply_inventory_on_delivery to push
-        // the items into inventory_schema.inventory at the destination
-        // warehouse (with composite expansion via product_variant_composition).
-        // Inventory is therefore handled at the DB level and we MUST NOT call
-        // warehouseService.addStockToProduct here: it uses a separate
-        // connection outside this txn, would block on the row lock that the
-        // trigger holds, and double-count the stock.
-        await txn.query(purchase.updateOrderStatus, [statusId, orderId]);
-
-        try {
-          const amountsResult = await txn.query(
-            purchase.getOrderAmountsForJournal,
-            [orderId],
-          );
-          if (amountsResult.rows.length > 0) {
-            const row = amountsResult.rows[0];
-            await this.journalService.generatePurchaseJournal(
-              {
-                tenantId: row.tenant_id,
-                purchaseOrderId: orderId,
-                subtotalAmount: Number(row.subtotal_amount),
-                taxAmount: Number(row.tax_amount),
-                totalAmount: Number(row.total_amount),
-                entryDate: new Date(),
-              },
-              txn,
-            );
-          }
-        } catch (accountingError) {
-          this.logger.error(
-            `Error generating purchase journal for order ${orderId}: ${(accountingError as Error).message}`,
-          );
-        }
-
-        await txn.commit();
-      } catch (error) {
-        await txn.rollback();
-        throw error;
-      }
-    } else {
-      await this.db.query(purchase.updateOrderStatus, [statusId, orderId]);
-    }
+    await this.db.query(purchase.updateOrderStatus, [statusId, orderId]);
 
     return this.getPurchaseOrderById(orderId, session);
+  }
+
+  /**
+   * Paso 1 de la recepcion de mercancia: la orden debe estar en status 2
+   * (Shipped/enviada). Crea (o retoma, si ya existe y sigue PENDING) un
+   * goods_receipt con un checklist de items precargado desde
+   * purchase_order_item -- editable via updateGoodsReceiptItems hasta que
+   * se confirme.
+   */
+  async startGoodsReceipt(orderId: string, session: IUserSession) {
+    const access = await this.getOrderAccessOrThrow(orderId);
+    this.assertTenantAccess(access.tenant_id, session);
+
+    if (access.purchase_order_status_id !== SHIPPED_STATUS_ID) {
+      throw new ForbiddenException(
+        'Solo se puede iniciar la recepcion mientras la orden esta en estado "enviada"',
+      );
+    }
+
+    let goodsReceiptId: string;
+    try {
+      const result = await this.db.query(goodsReceipt.start, [orderId]);
+      goodsReceiptId = result.rows[0]?.goods_receipt_id;
+    } catch (e: any) {
+      throw new BadRequestException(
+        'Error al iniciar la recepcion: ' + (e.detail || e.message),
+      );
+    }
+
+    return this.getGoodsReceipt(goodsReceiptId, session);
+  }
+
+  /**
+   * Paso 2 (opcional, repetible): corrige cantidad/productos recibidos
+   * contra lo que realmente llego, mientras el goods_receipt siga PENDING.
+   * purchase_order_item nunca se toca -- sigue siendo el registro inmutable
+   * de lo que se pidio originalmente.
+   */
+  async updateGoodsReceiptItems(
+    goodsReceiptId: string,
+    dto: UpdateGoodsReceiptDto,
+    session: IUserSession,
+  ) {
+    const access = await this.getGoodsReceiptAccessOrThrow(goodsReceiptId);
+    this.assertTenantAccess(access.tenant_id, session);
+
+    if (access.status !== 'PENDING') {
+      throw new ForbiddenException(
+        'Los items de la recepcion solo pueden editarse mientras esta PENDING',
+      );
+    }
+
+    try {
+      await this.db.query(goodsReceipt.updateItems, [
+        goodsReceiptId,
+        JSON.stringify(dto.items),
+        access.tenant_id,
+      ]);
+    } catch (e: any) {
+      throw new BadRequestException(
+        'Error al actualizar los items recibidos: ' + (e.detail || e.message),
+      );
+    }
+
+    return this.getGoodsReceipt(goodsReceiptId, session);
+  }
+
+  /**
+   * Paso 3: bloquea la edicion, aplica inventario desde los items ya
+   * corregidos, corre el three-way matching (que puede abrir una disputa
+   * automatica si hay discrepancia) y recien ahi mueve la orden a status 3
+   * (Delivered). Unica via legitima para llegar a ese status -- ver el
+   * guard trigger en la DB.
+   */
+  async confirmGoodsReceipt(goodsReceiptId: string, session: IUserSession) {
+    const access = await this.getGoodsReceiptAccessOrThrow(goodsReceiptId);
+    this.assertTenantAccess(access.tenant_id, session);
+
+    if (access.status !== 'PENDING') {
+      throw new ForbiddenException(
+        'Esta recepcion ya fue confirmada anteriormente',
+      );
+    }
+
+    const txn = await this.db.transaction();
+    try {
+      // confirm_goods_receipt() hace todo esto en un solo lado (DB): aplica
+      // inventario, corre three-way matching y abre disputa si corresponde.
+      // Mismo motivo que la vieja migracion de status 3 explicaba: no llamar
+      // warehouseService aqui, correria en otra conexion fuera de esta txn.
+      await txn.query(goodsReceipt.confirm, [goodsReceiptId]);
+
+      try {
+        const amountsResult = await txn.query(
+          purchase.getOrderAmountsForJournal,
+          [access.purchase_order_id],
+        );
+        if (amountsResult.rows.length > 0) {
+          const row = amountsResult.rows[0];
+          await this.journalService.generatePurchaseJournal(
+            {
+              tenantId: row.tenant_id,
+              purchaseOrderId: access.purchase_order_id,
+              subtotalAmount: Number(row.subtotal_amount),
+              taxAmount: Number(row.tax_amount),
+              totalAmount: Number(row.total_amount),
+              entryDate: new Date(),
+            },
+            txn,
+          );
+        }
+      } catch (accountingError) {
+        this.logger.error(
+          `Error generating purchase journal for order ${access.purchase_order_id}: ${(accountingError as Error).message}`,
+        );
+      }
+
+      await txn.commit();
+    } catch (error) {
+      await txn.rollback();
+      throw error;
+    }
+
+    return this.getPurchaseOrderById(access.purchase_order_id, session);
+  }
+
+  async getGoodsReceipt(goodsReceiptId: string, session: IUserSession) {
+    const access = await this.getGoodsReceiptAccessOrThrow(goodsReceiptId);
+    this.assertTenantAccess(access.tenant_id, session);
+
+    const result = await this.db.query(goodsReceipt.getWithItems, [
+      goodsReceiptId,
+    ]);
+    return result.rows[0] ?? null;
+  }
+
+  async listDisputes(orderId: string, session: IUserSession) {
+    const access = await this.getOrderAccessOrThrow(orderId);
+    this.assertTenantAccess(access.tenant_id, session);
+
+    const result = await this.db.query(disputes.listByOrder, [orderId]);
+    return result.rows;
+  }
+
+  /**
+   * Reporte manual de discrepancia (ej. detectada fuera del flujo de
+   * recepcion, o antes de que exista un goods_receipt). confirmGoodsReceipt()
+   * abre disputas automaticamente para discrepancias que el three-way
+   * matching detecta al confirmar -- esto cubre el caso en que alguien nota
+   * algo por su cuenta.
+   */
+  async createDispute(dto: CreateDisputeDto, session: IUserSession) {
+    const accessResult = await this.db.query(
+      disputes.getOrderAccessForDispute,
+      [dto.purchase_order_id],
+    );
+    const access = accessResult.rows[0] as
+      | { purchase_order_id: string; tenant_id: string }
+      | undefined;
+
+    if (!access) {
+      throw new NotFoundException('Orden de compra no encontrada');
+    }
+    this.assertTenantAccess(access.tenant_id, session);
+
+    const result = await this.db.query(disputes.create, [
+      dto.purchase_order_id,
+      dto.supplier_invoice_id ?? null,
+      access.tenant_id,
+      dto.dispute_type,
+      dto.description,
+    ]);
+    return result.rows[0];
+  }
+
+  async resolveDispute(
+    disputeId: string,
+    dto: ResolveDisputeDto,
+    session: IUserSession,
+  ) {
+    const accessResult = await this.db.query(disputes.getAccessById, [
+      disputeId,
+    ]);
+    const access = accessResult.rows[0] as
+      | { dispute_id: string; tenant_id: string; status: string }
+      | undefined;
+
+    if (!access) {
+      throw new NotFoundException('Disputa no encontrada');
+    }
+    this.assertTenantAccess(access.tenant_id, session);
+
+    if (access.status !== 'OPEN') {
+      throw new BadRequestException('Esta disputa ya fue resuelta');
+    }
+
+    const result = await this.db.query(disputes.resolve, [
+      dto.resolution_notes,
+      disputeId,
+    ]);
+    return result.rows[0];
+  }
+
+  private async getGoodsReceiptAccessOrThrow(goodsReceiptId: string) {
+    const result = await this.db.query(goodsReceipt.getAccess, [
+      goodsReceiptId,
+    ]);
+    const access = result.rows[0] as
+      | {
+          goods_receipt_id: string;
+          purchase_order_id: string;
+          status: string;
+          tenant_id: string;
+        }
+      | undefined;
+
+    if (!access) {
+      throw new NotFoundException('Recepcion de mercancia no encontrada');
+    }
+
+    return access;
   }
 
   async updateSupplierInvoice(

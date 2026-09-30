@@ -17,6 +17,9 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateSupplierInvoiceDto } from './dto/update-supplier-invoice.dto';
 import { ApplySupplierCreditDto } from './dto/apply-supplier-credit.dto';
+import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
+import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
@@ -159,6 +162,114 @@ export class PurchaseController {
       dto.purchase_account_payable_id,
       session,
     );
+  }
+
+  @ApiOperation({
+    summary: 'Iniciar recepcion de mercancia',
+    description:
+      'Solo mientras la orden esta en estado "enviada" (Shipped). Crea un checklist editable de items precargado desde la orden -- corregilo con PATCH antes de confirmar si el proveedor envio mal la mercancia.',
+  })
+  @ApiResponse({ status: 200, description: 'Recepcion iniciada (PENDING)' })
+  @ApiResponse({
+    status: 403,
+    description: 'La orden no esta en estado "enviada"',
+  })
+  @Post(':id/goods-receipt')
+  startGoodsReceipt(@Param('id') id: string, @Session() session: IUserSession) {
+    return this.purchaseService.startGoodsReceipt(id, session);
+  }
+
+  @ApiOperation({ summary: 'Ver el detalle de una recepcion de mercancia' })
+  @ApiResponse({ status: 200, description: 'Recepcion obtenida' })
+  @ApiResponse({ status: 404, description: 'Recepcion no encontrada' })
+  @Get('goods-receipt/:goodsReceiptId')
+  getGoodsReceipt(
+    @Param('goodsReceiptId') goodsReceiptId: string,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.getGoodsReceipt(goodsReceiptId, session);
+  }
+
+  @ApiOperation({
+    summary: 'Corregir items recibidos',
+    description:
+      'Solo mientras la recepcion esta PENDING. No modifica la orden original -- corrige lo que realmente llego.',
+  })
+  @ApiResponse({ status: 200, description: 'Items corregidos' })
+  @ApiResponse({
+    status: 403,
+    description: 'La recepcion ya fue confirmada',
+  })
+  @Patch('goods-receipt/:goodsReceiptId')
+  updateGoodsReceiptItems(
+    @Param('goodsReceiptId') goodsReceiptId: string,
+    @Body() dto: UpdateGoodsReceiptDto,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.updateGoodsReceiptItems(
+      goodsReceiptId,
+      dto,
+      session,
+    );
+  }
+
+  @ApiOperation({
+    summary: 'Confirmar recepcion de mercancia',
+    description:
+      'Bloquea edicion, aplica inventario desde los items corregidos, corre three-way matching (puede abrir una disputa automatica si hay discrepancia) y mueve la orden a "entregada".',
+  })
+  @ApiResponse({ status: 200, description: 'Recepcion confirmada' })
+  @ApiResponse({
+    status: 403,
+    description: 'La recepcion ya fue confirmada anteriormente',
+  })
+  @Post('goods-receipt/:goodsReceiptId/confirm')
+  confirmGoodsReceipt(
+    @Param('goodsReceiptId') goodsReceiptId: string,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.confirmGoodsReceipt(goodsReceiptId, session);
+  }
+
+  @ApiOperation({ summary: 'Reportar una discrepancia con el proveedor' })
+  @ApiResponse({ status: 201, description: 'Disputa creada' })
+  @ApiResponse({ status: 404, description: 'Orden de compra no encontrada' })
+  @Post('disputes')
+  createDispute(
+    @Body() dto: CreateDisputeDto,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.createDispute(dto, session);
+  }
+
+  @ApiOperation({ summary: 'Listar disputas de una orden de compra' })
+  @ApiResponse({ status: 200, description: 'Disputas obtenidas' })
+  @Get('disputes')
+  listDisputesByQuery(
+    @Query('purchase_order_id') purchaseOrderId: string,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.listDisputes(purchaseOrderId, session);
+  }
+
+  @ApiOperation({ summary: 'Listar disputas de una orden de compra' })
+  @ApiResponse({ status: 200, description: 'Disputas obtenidas' })
+  @Get(':id/disputes')
+  listDisputes(@Param('id') id: string, @Session() session: IUserSession) {
+    return this.purchaseService.listDisputes(id, session);
+  }
+
+  @ApiOperation({ summary: 'Resolver una disputa abierta' })
+  @ApiResponse({ status: 200, description: 'Disputa resuelta' })
+  @ApiResponse({ status: 400, description: 'La disputa ya fue resuelta' })
+  @ApiResponse({ status: 404, description: 'Disputa no encontrada' })
+  @Patch('disputes/:disputeId/resolve')
+  resolveDispute(
+    @Param('disputeId') disputeId: string,
+    @Body() dto: ResolveDisputeDto,
+    @Session() session: IUserSession,
+  ) {
+    return this.purchaseService.resolveDispute(disputeId, dto, session);
   }
 
   @ApiOperation(getThreeWayMatchingDoc.operation)
