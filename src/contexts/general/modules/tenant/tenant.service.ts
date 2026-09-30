@@ -255,7 +255,14 @@ export class TenantService {
         today, // start_date
         nextYear, // end_date
         40, // hours
-        0, // base_salary
+        // base_salary: create_new_employee() abre salary_history con este
+        // valor, y hr_schema.salary_history exige monthly_salary > 0
+        // (chk_salary_history_positive) -- 0 revienta el INSERT. No hay un
+        // salario legal que asumir aqui (salario_minimo_nacional depende de
+        // decreto y se carga por tenant, no esta disponible recien
+        // provisionado); placeholder minimo, a corregir desde RRHH una vez
+        // el tenant configure su salario_minimo_nacional.
+        0.01, // base_salary
         'Administrador', // duties
         1, // turn_type
         null, // turn_id — sin turno al crear el admin en onboarding
