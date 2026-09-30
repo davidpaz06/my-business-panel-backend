@@ -36,12 +36,14 @@ export class SettlementController {
     @Query('breakdown') breakdown: string,
     @Query('onlyDeductions') onlyDeductions: string,
     @Query('hireDate') hireDate: string,
+    @Query('simulationDate') simulationDate: string,
     @Session() user: IUserSession,
   ) {
     return this.service.preview(user.tenant_id, employeeId, endDate, {
       breakdown: breakdown === 'true',
       onlyDeductions: onlyDeductions === 'true',
       hireDateOverride: hireDate || undefined,
+      simulationDate: simulationDate || undefined,
     });
   }
 

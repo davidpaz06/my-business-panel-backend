@@ -70,6 +70,11 @@ export class CreateAdvanceDto {
   @IsOptional()
   @IsString()
   reason_detail?: string;
+
+  /** Solo staging (ver resolveSimulationDate) -- fecha simulada para probar tope vigente. */
+  @IsOptional()
+  @IsDateString()
+  simulation_date?: string;
 }
 
 export class ApproveAdvanceDto {

@@ -8,6 +8,7 @@ import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
 import { hrQueries } from '@hr/hr.queries';
+import { resolveSimulationDate } from '@/common/utilities/simulation-date';
 import { ParametersService } from '../parameters/parameters.service';
 import { SeveranceDepositService } from './severance-deposit.service';
 import { SeveranceInterestService } from './severance-interest.service';
@@ -45,7 +46,7 @@ export class SeveranceAdvanceService {
   }
 
   async create(tenantId: string, dto: CreateAdvanceDto) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = resolveSimulationDate(dto.simulation_date);
     const availability = await this.available(tenantId, dto.employee_id, today);
     const maxAdvance = new Decimal(availability.maxAdvance);
 

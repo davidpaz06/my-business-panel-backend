@@ -25,6 +25,7 @@ import {
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { resolveSimulationDate } from '@/common/utilities/simulation-date';
 
 @ApiTags('Severance')
 @Controller('severance')
@@ -152,9 +153,10 @@ export class SeveranceController {
   @Get('advances/:employeeId/available')
   availableAdvance(
     @Param('employeeId') employeeId: string,
+    @Query('simulationDate') simulationDate: string,
     @Session() user: IUserSession,
   ) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = resolveSimulationDate(simulationDate);
     return this.advanceService.available(user.tenant_id, employeeId, today);
   }
 

@@ -18,6 +18,7 @@ import { MoraService } from '../mora/mora.service';
 import { SalaryService } from '../salary/salary.service';
 import { indemnityApplies } from './interfaces/indemnity';
 import { CreateSettlementDto, PaySettlementDto } from './dto/settlement.dto';
+import { resolveSimulationDate } from '@/common/utilities/simulation-date';
 
 const { employee, settlement, settlementItem } = hrQueries;
 
@@ -70,6 +71,7 @@ export class SettlementService {
       breakdown?: boolean;
       onlyDeductions?: boolean;
       hireDateOverride?: string;
+      simulationDate?: string;
     } = {},
   ) {
     const emp = await this.getEmployee(employeeId, tenantId);
@@ -278,7 +280,8 @@ export class SettlementService {
     );
 
     // Mora proyectada si el pago (hoy, hipoteticamente) excede los 5 dias (Art. 142.f).
-    const today = new Date().toISOString().slice(0, 10);
+    // simulationDate: solo staging, ver resolveSimulationDate.
+    const today = resolveSimulationDate(opts.simulationDate);
     const paymentDueDate = this.addDays(endDate, GRACE_DAYS);
     let moraDays = 0;
     let moraAmount = new Decimal(0);
@@ -478,6 +481,7 @@ export class SettlementService {
     article: string,
     salaryBasis: 'normal' | 'integral',
     amount: Decimal,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- posicional, reservado para ordenar items en el detalle
     _sortOrder: number,
   ): SettlementItemDraft {
     return {
