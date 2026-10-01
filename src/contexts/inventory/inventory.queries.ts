@@ -139,13 +139,21 @@ export const inventoryQueries = {
     FROM jsonb_to_recordset($3::jsonb)
       AS x(product_variant_id uuid, stock integer, expiration_date timestamp)
     RETURNING *`,
+  // $5 (include_catalog): false/null preserva el comportamiento historico
+  // (INNER JOIN efectivo -- solo variantes con fila de inventario en esta
+  // bodega, usado por TransferModal donde hace falta stock real para
+  // transferir). true muestra el catalogo completo del tenant con
+  // stock = 0 para variantes que nunca tuvieron una fila de inventario en
+  // esta bodega -- las usa el combo de POS/Ventas, que de otro modo
+  // quedaba vacio para cualquier producto que no hubiera pasado por un
+  // goods-receipt todavia.
   listInventoryByWarehouse: `
     SELECT
       i.inventory_id,
-      i.tenant_id,
-      i.product_variant_id,
-      i.warehouse_id,
-      i.stock,
+      pv.tenant_id,
+      pv.product_variant_id,
+      $1::uuid AS warehouse_id,
+      COALESCE(i.stock, 0) AS stock,
       i.expiration_date,
       i.created_at,
       i.updated_at,
@@ -156,9 +164,13 @@ export const inventoryQueries = {
       pv.is_composite,
       pv.unit_price,
       pv.giftable
-    FROM inventory_schema.inventory i
-    INNER JOIN general_schema.product_variant pv USING(tenant_id, product_variant_id)
-    WHERE i.warehouse_id = $1 AND i.tenant_id = $2
+    FROM general_schema.product_variant pv
+    LEFT JOIN inventory_schema.inventory i
+      ON i.product_variant_id = pv.product_variant_id
+     AND i.tenant_id = pv.tenant_id
+     AND i.warehouse_id = $1
+    WHERE pv.tenant_id = $2
+      AND ($5::boolean IS TRUE OR i.inventory_id IS NOT NULL)
       AND ($3::text IS NULL OR $3 = '' OR
         pv.variant_name ILIKE '%' || $3 || '%' OR
         pv.sku ILIKE '%' || $3 || '%' OR
@@ -166,8 +178,8 @@ export const inventoryQueries = {
       )
       AND ($4::uuid IS NULL OR EXISTS (
         SELECT 1 FROM general_schema.product_variant_group_assignment pvga
-        WHERE pvga.product_variant_id = i.product_variant_id
-          AND pvga.tenant_id = i.tenant_id
+        WHERE pvga.product_variant_id = pv.product_variant_id
+          AND pvga.tenant_id = pv.tenant_id
           AND pvga.tenant_product_group_id = $4::uuid
       ))
     ORDER BY pv.variant_name`,

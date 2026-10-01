@@ -107,6 +107,7 @@ export class WarehouseController {
     @Param('warehouse_id') warehouse_id: string,
     @Query('search') search: string | undefined,
     @Query('group_id') group_id: string | undefined,
+    @Query('include_catalog') include_catalog: string | undefined,
     @Session() userSession: IUserSession,
   ) {
     return this.warehouseService.listInventoryByWarehouse(
@@ -114,6 +115,7 @@ export class WarehouseController {
       userSession.tenant_id,
       search,
       group_id,
+      include_catalog === 'true',
     );
   }
 
