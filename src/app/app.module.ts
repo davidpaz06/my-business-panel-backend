@@ -9,6 +9,7 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 // General Modules
 import { AuthModule } from '@/contexts/general/modules/auth/auth.module';
 import { DbModule } from '@/contexts/general/modules/db/db.module';
+import { TenantScopeModule } from '@/common/tenant/tenant-scope.module';
 import { SubscriptionModule } from '@/contexts/general/modules/subscription/subscription.module';
 import { CustomerModule } from '@/contexts/general/modules/customer/customer.module';
 import { IdentificationTypeModule } from '@/contexts/general/modules/identification-type/identification-type.module';
@@ -102,6 +103,7 @@ import { IvaModule } from '@/contexts/finances/modules/iva/iva.module';
     CustomerModule,
     IdentificationTypeModule,
     DbModule,
+    TenantScopeModule,
     QueueModule,
     TenantModule,
     ProductCategoryModule,

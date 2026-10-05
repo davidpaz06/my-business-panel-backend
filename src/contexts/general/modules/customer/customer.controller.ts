@@ -14,9 +14,11 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { NewClientDto } from './dto/newClient.dto';
 import { UpdateClientDto } from './dto/updateClient.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
-// import { Session } from '@/common/decorators/session.decorator';
-// import { IUserSession } from '@/common/interfaces/user_session.interface';
-import { StateService } from '@/contexts/general/modules/state/state.service';
+import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
+import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import {
   getAllCustomersForTenantDoc,
   getOneCustomerByIdDoc,
@@ -26,17 +28,22 @@ import {
   deleteCustomerDoc,
 } from '@/docs/contexts/general/customer';
 
+// Aislamiento por tenant: el tenant sale SIEMPRE de la sesion. Las rutas que
+// conservan :tenantId (compatibilidad con el frontend) lo validan contra la
+// sesion; ningun endpoint confia en un tenant_id enviado por el cliente.
 @ApiTags('Customer')
 @Controller('customers')
+@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
 export class CustomerController {
   constructor(
     private readonly customerService: CustomerService,
-    private readonly stateService: StateService,
+    private readonly tenantScope: TenantScopeService,
   ) {}
 
-  // Global list for superusers — must be declared BEFORE :tenantId
+  // Listado global: solo superusuario de plataforma. Debe declararse ANTES de
+  // las rutas con parametro.
   @Get('all')
-  @UseGuards(AuthenticationGuard)
+  @RequiredRole('superuser')
   async getAllCustomersGlobal(
     @Query('page') page = '1',
     @Query('limit') limit = '100',
@@ -47,19 +54,19 @@ export class CustomerController {
     );
   }
 
-  // Uniqueness probe used by the frontend before submitting create/edit forms.
-  // Scoped to a tenant because the unique constraints on tenant_customer are
-  // (tenant_id, document_number), (tenant_id, email) and (tenant_id, phone).
+  // Sonda de unicidad usada por el frontend antes de crear/editar. Siempre
+  // sobre el tenant de la sesion: con un tenant ajeno serviria para averiguar
+  // si un documento, email o telefono existe en otra empresa.
   @Get('availability')
-  @UseGuards(AuthenticationGuard)
   async checkAvailability(
-    @Query('tenant_id') tenantId: string,
+    @Session() session: IUserSession,
     @Query('field') field: string,
     @Query('value') value: string,
+    @Query('tenant_id') requestedTenantId?: string,
     @Query('exclude_id') excludeId?: string,
   ) {
     return this.customerService.checkAvailability(
-      tenantId,
+      this.tenantScope.resolveRequestedTenant(session, requestedTenantId),
       field,
       value,
       excludeId,
@@ -71,13 +78,14 @@ export class CustomerController {
   @ApiResponse(getAllCustomersForTenantDoc.responses[401])
   @Get('tenant/:tenantId')
   async getAllCustomersForTenant(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('page') page = '1',
     @Query('limit') limit = '100',
     @Query('segment_id') segmentId?: string,
   ) {
     return this.customerService.getAllCustomersPaginated(
-      tenantId,
+      this.tenantScope.resolveRequestedTenant(session, tenantId),
       parseInt(page),
       parseInt(limit),
       segmentId,
@@ -85,8 +93,8 @@ export class CustomerController {
   }
 
   @Get('tenant/:tenantId/search')
-  @UseGuards(AuthenticationGuard)
   async searchCustomers(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('q') query: string,
     @Query('page') page = '1',
@@ -94,7 +102,7 @@ export class CustomerController {
     @Query('segment_id') segmentId?: string,
   ) {
     return this.customerService.search(
-      tenantId,
+      this.tenantScope.resolveRequestedTenant(session, tenantId),
       query,
       parseInt(page),
       parseInt(limit),
@@ -102,13 +110,21 @@ export class CustomerController {
     );
   }
 
+  // Busqueda por documento (buscador de la venta): estrictamente el tenant de
+  // la sesion, tambien para el superusuario.
   @ApiOperation(getOneCustomerDoc.operation)
   @ApiResponse(getOneCustomerDoc.responses[200])
   @ApiResponse(getOneCustomerDoc.responses[401])
   @ApiResponse(getOneCustomerDoc.responses[404])
   @Get('doc/:documentId')
-  async getOneCustomer(@Param('documentId') documentId: string) {
-    return this.customerService.findCustomerByDocumentId(documentId);
+  async getOneCustomer(
+    @Session() session: IUserSession,
+    @Param('documentId') documentId: string,
+  ) {
+    return this.customerService.findCustomerByDocumentId(
+      documentId,
+      session.tenant_id,
+    );
   }
 
   @ApiOperation(getOneCustomerByIdDoc.operation)
@@ -116,28 +132,40 @@ export class CustomerController {
   @ApiResponse(getOneCustomerByIdDoc.responses[401])
   @ApiResponse(getOneCustomerByIdDoc.responses[404])
   @Get(':id/detail')
-  @UseGuards(AuthenticationGuard)
-  async getCustomerDetail(@Param('id') id: string) {
-    return this.customerService.getCustomerDetail(id);
+  async getCustomerDetail(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+  ) {
+    return this.customerService.getCustomerDetail(
+      id,
+      this.tenantScope.scopeFor(session),
+    );
   }
 
   @Get(':id/sales')
-  @UseGuards(AuthenticationGuard)
   async getCustomerSalesHistory(
+    @Session() session: IUserSession,
     @Param('id') id: string,
     @Query('page') page = '1',
     @Query('limit') limit = '10',
   ) {
     return this.customerService.getCustomerSalesHistory(
       id,
+      this.tenantScope.scopeFor(session),
       parseInt(page),
       parseInt(limit),
     );
   }
 
   @Get(':id')
-  async getOneCustomerById(@Param('id') id: string) {
-    return this.customerService.findCustomerById(id);
+  async getOneCustomerById(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+  ) {
+    return this.customerService.findCustomerById(
+      id,
+      this.tenantScope.scopeFor(session),
+    );
   }
 
   @ApiOperation(createCustomerDoc.operation)
@@ -145,8 +173,11 @@ export class CustomerController {
   @ApiResponse(createCustomerDoc.responses[400])
   @ApiResponse(createCustomerDoc.responses[401])
   @Post()
-  async createCustomer(@Body() request: NewClientDto) {
-    return this.customerService.createCustomer(request);
+  async createCustomer(
+    @Session() session: IUserSession,
+    @Body() request: NewClientDto,
+  ) {
+    return this.customerService.createCustomer(session.tenant_id, request);
   }
 
   @ApiOperation(updateCustomerDoc.operation)
@@ -155,10 +186,15 @@ export class CustomerController {
   @ApiResponse(updateCustomerDoc.responses[401])
   @Patch(':id')
   async updateCustomer(
+    @Session() session: IUserSession,
     @Param('id') id: string,
     @Body() request: UpdateClientDto,
   ) {
-    return this.customerService.updateCustomer(id, request);
+    return this.customerService.updateCustomer(
+      id,
+      request,
+      this.tenantScope.scopeFor(session),
+    );
   }
 
   @ApiOperation(deleteCustomerDoc.operation)
@@ -166,7 +202,13 @@ export class CustomerController {
   @ApiResponse(deleteCustomerDoc.responses[401])
   @ApiResponse(deleteCustomerDoc.responses[404])
   @Delete(':id')
-  async deleteCustomer(@Param('id') id: string) {
-    return this.customerService.deleteCustomer(id);
+  async deleteCustomer(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+  ) {
+    return this.customerService.deleteCustomer(
+      id,
+      this.tenantScope.scopeFor(session),
+    );
   }
 }

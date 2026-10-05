@@ -5,15 +5,12 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+// El tenant del cliente NO viaja en el body: se toma de la sesion. Un
+// tenant_id enviado por el cliente lo descarta el ValidationPipe (whitelist).
 export class NewClientDto {
-  @IsNotEmpty()
-  @IsUUID()
-  tenant_id!: string;
-
   @IsNotEmpty()
   @IsString()
   first_name!: string;

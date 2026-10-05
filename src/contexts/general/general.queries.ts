@@ -155,7 +155,10 @@ export const generalQueryDefs = {
         is_tenant, created_at, updated_at
       FROM general_schema.tenant_customer
       WHERE tenant_customer_id = $1
+        AND ($2::uuid IS NULL OR tenant_id = $2)
     `,
+    // Busqueda por documento: SIEMPRE acotada al tenant de la sesion. El mismo
+    // documento puede existir en varias empresas; cada una ve solo el suyo.
     getInfo: `
       SELECT
         tc.tenant_customer_id AS customer_id,
@@ -182,6 +185,7 @@ export const generalQueryDefs = {
       LEFT JOIN general_schema.customer_segment cs USING(customer_segment_id)
       LEFT JOIN general_schema.identification_type d ON d.identification_type_id = tc.identification_type_id
       WHERE tc.document_number = $1
+        AND tc.tenant_id = $2
     `,
     create: `
       INSERT INTO general_schema.tenant_customer
@@ -208,10 +212,14 @@ export const generalQueryDefs = {
         customer_segment_id AS segment_id,
         is_tenant, created_at, updated_at
       FROM general_schema.tenant_customer
-      WHERE email = $1
+      WHERE email = $1 AND tenant_id = $2
     `,
-    delete:
-      'DELETE FROM general_schema.tenant_customer WHERE tenant_customer_id = $1',
+    delete: `
+      DELETE FROM general_schema.tenant_customer
+      WHERE tenant_customer_id = $1
+        AND ($2::uuid IS NULL OR tenant_id = $2)
+      RETURNING tenant_customer_id
+    `,
 
     // Enriched detail: customer + segment name + loyalty score
     detail: `
@@ -252,6 +260,7 @@ export const generalQueryDefs = {
       LEFT JOIN pos_schema.loyalty_program lp
         ON lp.tenant_id = tc.tenant_id AND lp.is_active = true
       WHERE tc.tenant_customer_id = $1
+        AND ($2::uuid IS NULL OR tc.tenant_id = $2)
       LIMIT 1
     `,
 

@@ -20,16 +20,36 @@ const { customer } = generalQueries;
 export class CustomerService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
-  async findCustomerByDocumentId(clientId: string): Promise<Customer> {
-    const { rows } = await this.db.query(customer.getInfo, [clientId]);
+  /**
+   * Busca un cliente por documento dentro del tenant indicado. El mismo
+   * documento puede existir en otras empresas: nunca se devuelve el de otra.
+   */
+  async findCustomerByDocumentId(
+    documentNumber: string,
+    tenantId: string,
+  ): Promise<Customer> {
+    const { rows } = await this.db.query(customer.getInfo, [
+      documentNumber,
+      tenantId,
+    ]);
     if (!rows || rows.length === 0) {
       throw new NotFoundException('Customer not found');
     }
     return rows[0];
   }
 
-  async findCustomerById(customerId: string): Promise<Customer> {
-    const { rows } = await this.db.query(customer.byId, [customerId]);
+  /**
+   * `scopeTenantId` null = sin filtro de tenant (solo superusuario de
+   * plataforma, ver TenantScopeService.scopeFor).
+   */
+  async findCustomerById(
+    customerId: string,
+    scopeTenantId: string | null,
+  ): Promise<Customer> {
+    const { rows } = await this.db.query(customer.byId, [
+      customerId,
+      scopeTenantId,
+    ]);
     if (!rows || rows.length === 0) {
       throw new NotFoundException('Customer not found');
     }
@@ -123,9 +143,9 @@ export class CustomerService {
     };
   }
 
-  async createCustomer(customerData: NewClientDto) {
+  /** El tenant del nuevo cliente es siempre el de la sesion, nunca el del body. */
+  async createCustomer(tenant_id: string, customerData: NewClientDto) {
     const {
-      tenant_id,
       first_name,
       last_name,
       document_type_id,
@@ -184,7 +204,11 @@ export class CustomerService {
     }
   }
 
-  async updateCustomer(customerId: string, customerData: UpdateClientDto) {
+  async updateCustomer(
+    customerId: string,
+    customerData: UpdateClientDto,
+    scopeTenantId: string | null,
+  ) {
     const { ...updates } = customerData;
 
     const columnMap: Record<string, string> = {
@@ -226,7 +250,7 @@ export class CustomerService {
       updateKeys.includes('document_type_id') ||
       updateKeys.includes('business_name')
     ) {
-      const current = await this.findCustomerById(customerId);
+      const current = await this.findCustomerById(customerId, scopeTenantId);
       await this.assertBusinessNameForLegalPerson(
         updates.document_type_id ?? current.identification_type ?? undefined,
         updates.business_name ?? current.business_name ?? undefined,
@@ -244,13 +268,14 @@ export class CustomerService {
       index++;
     }
 
-    paramsArray.push(customerId);
+    paramsArray.push(customerId, scopeTenantId);
     const setString = setClause.join(', ');
 
     const queryString = `
       UPDATE general_schema.tenant_customer
       SET ${setString}
       WHERE tenant_customer_id = $${index}
+        AND ($${index + 1}::uuid IS NULL OR tenant_id = $${index + 1})
       RETURNING
         tenant_customer_id AS customer_id, tenant_id,
         first_name, last_name, business_name,
@@ -263,8 +288,11 @@ export class CustomerService {
 
     try {
       const res = await this.db.query(queryString, paramsArray);
+      if (res.rows.length === 0)
+        throw new NotFoundException('Customer not found');
       return res.rows[0];
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       console.error('Error updating customer:', error);
       throw new InternalServerErrorException(error);
     }
@@ -307,21 +335,27 @@ export class CustomerService {
     return { exists: result.rows.length > 0 };
   }
 
-  async deleteCustomer(customerId: string) {
-    const result = await this.findCustomerById(customerId);
-    if (!result) {
-      throw new Error('Customer not found');
-    }
+  async deleteCustomer(customerId: string, scopeTenantId: string | null) {
+    let deleted;
     try {
-      await this.db.query(customer.delete, [customerId]);
-      return { message: 'Customer deleted' };
+      deleted = await this.db.query(customer.delete, [
+        customerId,
+        scopeTenantId,
+      ]);
     } catch (error) {
       throw new InternalServerErrorException(error);
     }
+    if (deleted.rows.length === 0) {
+      throw new NotFoundException('Customer not found');
+    }
+    return { message: 'Customer deleted' };
   }
 
-  async getCustomerDetail(customerId: string) {
-    const { rows } = await this.db.query(customer.detail, [customerId]);
+  async getCustomerDetail(customerId: string, scopeTenantId: string | null) {
+    const { rows } = await this.db.query(customer.detail, [
+      customerId,
+      scopeTenantId,
+    ]);
     if (!rows || rows.length === 0) {
       throw new NotFoundException('Customer not found');
     }
@@ -330,9 +364,13 @@ export class CustomerService {
 
   async getCustomerSalesHistory(
     customerId: string,
+    scopeTenantId: string | null,
     page = 1,
     limit = 10,
   ): Promise<{ sales: unknown[]; total: number; page: number; limit: number }> {
+    // 404 si el cliente no es del tenant: el historial de ventas se pide solo
+    // por id de cliente y no debe servir para leer ventas de otra empresa.
+    await this.findCustomerById(customerId, scopeTenantId);
     const offset = (page - 1) * limit;
     const [dataResult, countResult] = await Promise.all([
       this.db.query(customer.salesHistory, [customerId, limit, offset]),
