@@ -10,8 +10,7 @@ import { join, relative, sep } from 'path';
  *    que revisar cada uno (catalogos publicos vs datos de tenant) y sacarlo de
  *    la lista. La lista solo puede ENCOGER: un controller nuevo sin guard
  *    hace fallar este test.
- *  - Los controllers del POS ya no figuran: cada fase del plan de aislamiento
- *    saca el suyo de aqui.
+ *  - Los controllers del POS ya no figuran: todos exigen sesion.
  */
 const PUBLIC_BY_DESIGN = ['app/app.controller.ts'];
 
@@ -32,11 +31,6 @@ const NOT_YET_AUDITED = [
   'contexts/general/modules/tenant_product_group_type/tenant-product-group-type.controller.ts',
 ];
 
-// POS pendiente de su fase (se elimina de aqui al cerrarla).
-const POS_PENDING_PHASE = [
-  'contexts/pos/modules/loyal-program/loyalty-program.controller.ts',
-];
-
 const SRC = join(__dirname, '..', '..');
 
 function controllerFiles(dir: string): string[] {
@@ -48,11 +42,7 @@ function controllerFiles(dir: string): string[] {
 }
 
 describe('controllers: AuthenticationGuard obligatorio', () => {
-  const allowed = new Set([
-    ...PUBLIC_BY_DESIGN,
-    ...NOT_YET_AUDITED,
-    ...POS_PENDING_PHASE,
-  ]);
+  const allowed = new Set([...PUBLIC_BY_DESIGN, ...NOT_YET_AUDITED]);
 
   const files = controllerFiles(SRC).map((f) => ({
     path: relative(SRC, f).split(sep).join('/'),

@@ -17,8 +17,16 @@ export class LoyalProgramService {
     return programs.rows;
   }
 
-  async getLoyalProgramById(program_id: string): Promise<LoyalProgram> {
-    const program = await this.db.query(loyaltyProgram.byId, [program_id]);
+  // scopeTenantId: tenant de la sesion; null solo para el superusuario de
+  // plataforma. Un programa de otro tenant responde como si no existiera.
+  async getLoyalProgramById(
+    program_id: string,
+    scopeTenantId: string | null,
+  ): Promise<LoyalProgram> {
+    const program = await this.db.query(loyaltyProgram.byId, [
+      program_id,
+      scopeTenantId,
+    ]);
 
     if (program.rows.length === 0)
       throw new NotFoundException(
@@ -28,9 +36,8 @@ export class LoyalProgramService {
     return program.rows[0];
   }
 
-  async createLoyalProgram(data: NewLoyalProgramDto) {
+  async createLoyalProgram(tenant_id: string, data: NewLoyalProgramDto) {
     const {
-      tenant_id,
       points_earned_per_currency_unit,
       points_redeemed_per_currency_unit,
       minimum_purchase_for_points,
@@ -46,8 +53,11 @@ export class LoyalProgramService {
     return { message: 'Loyal Program created successfully' };
   }
 
-  async deleteLoyalProgram(program_id: string) {
-    const program = await this.db.query(loyaltyProgram.delete, [program_id]);
+  async deleteLoyalProgram(program_id: string, scopeTenantId: string | null) {
+    const program = await this.db.query(loyaltyProgram.delete, [
+      program_id,
+      scopeTenantId,
+    ]);
 
     if (program.rowCount === 0)
       throw new NotFoundException(
@@ -57,7 +67,11 @@ export class LoyalProgramService {
     return { message: 'Loyal Program deleted successfully' };
   }
 
-  async updateLoyalProgram(data: UpdateLoyalProgramDto, program_id: string) {
+  async updateLoyalProgram(
+    data: UpdateLoyalProgramDto,
+    program_id: string,
+    scopeTenantId: string | null,
+  ) {
     const {
       points_earned_per_currency_unit,
       points_redeemed_per_currency_unit,
@@ -71,6 +85,7 @@ export class LoyalProgramService {
       points_redeemed_per_currency_unit,
       minimum_purchase_for_points,
       is_active,
+      scopeTenantId,
     ]);
 
     if (programUpdated.rowCount === 0)

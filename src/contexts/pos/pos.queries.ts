@@ -916,11 +916,16 @@ export const posQueryDefs = {
     all: `
       SELECT * FROM pos_schema.loyalty_program WHERE tenant_id = $1
     `,
+    // $2 / $6 = tenant de alcance (null = superusuario de plataforma).
     delete: `
-      DELETE FROM pos_schema.loyalty_program WHERE loyalty_program_id = $1 RETURNING loyalty_program_id
+      DELETE FROM pos_schema.loyalty_program
+      WHERE loyalty_program_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)
+      RETURNING loyalty_program_id
     `,
     byId: `
-      SELECT * FROM pos_schema.loyalty_program WHERE loyalty_program_id = $1 LIMIT 1
+      SELECT * FROM pos_schema.loyalty_program
+      WHERE loyalty_program_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)
+      LIMIT 1
     `,
     update: `
       UPDATE pos_schema.loyalty_program
@@ -930,7 +935,7 @@ export const posQueryDefs = {
         minimum_purchase_for_points = COALESCE($4, minimum_purchase_for_points),
         is_active = COALESCE($5, is_active),
         updated_at = NOW()
-      WHERE loyalty_program_id = $1
+      WHERE loyalty_program_id = $1 AND ($6::uuid IS NULL OR tenant_id = $6)
       RETURNING loyalty_program_id
     `,
   },
