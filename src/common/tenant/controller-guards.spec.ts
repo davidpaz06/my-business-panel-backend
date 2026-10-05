@@ -34,7 +34,6 @@ const NOT_YET_AUDITED = [
 
 // POS pendiente de su fase (se elimina de aqui al cerrarla).
 const POS_PENDING_PHASE = [
-  'contexts/pos/modules/invoice/invoice.controller.ts',
   'contexts/pos/modules/loyal-program/loyalty-program.controller.ts',
   'contexts/pos/modules/returns/returns.controller.ts',
   'contexts/pos/modules/sale-item/sale-item.controller.ts',

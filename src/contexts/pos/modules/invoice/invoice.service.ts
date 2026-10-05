@@ -1,8 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import { Invoice, InvoiceDB, FullInvoice } from './interface/invoice.interface';
@@ -79,21 +75,37 @@ export class InvoiceService {
     return result.rows;
   }
 
-  async getInvoiceById(saleId: string): Promise<FullInvoice> {
-    const result = await this.db.query(invoice.getInvoiceById, [saleId]);
+  // scopeTenantId: tenant de la sesion; null solo para el superusuario de
+  // plataforma. Una factura de otro tenant responde igual que una inexistente.
+  async getInvoiceById(
+    saleId: string,
+    scopeTenantId: string | null,
+  ): Promise<FullInvoice> {
+    const result = await this.db.query(invoice.getInvoiceById, [
+      saleId,
+      scopeTenantId,
+    ]);
     if (result.rows.length == 0) throw new InvoiceNotFound();
     return result.rows[0];
   }
 
-  async getInvoiceBySaleId(saleId: string): Promise<FullInvoice | null> {
-    const result = await this.db.query(invoice.getInvoiceBySaleId, [saleId]);
+  async getInvoiceBySaleId(
+    saleId: string,
+    scopeTenantId: string | null,
+  ): Promise<FullInvoice | null> {
+    const result = await this.db.query(invoice.getInvoiceBySaleId, [
+      saleId,
+      scopeTenantId,
+    ]);
     return result.rows[0] ?? null;
   }
 
-  async deleteInvoice(invoiceId: string) {
-    const result = await this.db.query(invoice.deleteInvoice, [invoiceId]);
-    if (result.rows.length == 0)
-      throw new InternalServerErrorException('Error deleting invoice from db.');
+  async deleteInvoice(invoiceId: string, scopeTenantId: string | null) {
+    const result = await this.db.query(invoice.deleteInvoice, [
+      invoiceId,
+      scopeTenantId,
+    ]);
+    if (result.rows.length == 0) throw new InvoiceNotFound();
     return { message: `Invoice with id: ${invoiceId} deleted` };
   }
 }

@@ -147,6 +147,7 @@ export const posQueryDefs = {
       INNER JOIN general_schema.currency c USING(currency_id)
       INNER JOIN general_schema.tenant t ON t.tenant_id = tc.tenant_id
       WHERE i.sale_id = $1
+        AND ($2::uuid IS NULL OR t.tenant_id = $2)
     `,
     getInvoiceBySaleId: `
       SELECT
@@ -270,10 +271,19 @@ export const posQueryDefs = {
       LEFT JOIN general_schema.currency c ON c.currency_id = i.currency_id
       LEFT JOIN general_schema.users seller ON seller.user_id = s.seller_user_id
       WHERE i.sale_id = $1
+        AND ($2::uuid IS NULL OR b.tenant_id = $2)
       LIMIT 1
     `,
-    deleteInvoice:
-      'DELETE FROM pos_schema.invoice WHERE invoice_id = $1 RETURNING invoice_id',
+    // $2 = tenant de alcance (null = superusuario de plataforma).
+    deleteInvoice: `
+      DELETE FROM pos_schema.invoice i
+      USING pos_schema.sale s, general_schema.branch b
+      WHERE i.invoice_id = $1
+        AND s.sale_id = i.sale_id
+        AND b.branch_id = s.branch_id
+        AND ($2::uuid IS NULL OR b.tenant_id = $2)
+      RETURNING i.invoice_id
+    `,
     updateAmount: `
     UPDATE pos_schema.invoice SET total_amount = total_amount - $1 WHERE invoice_id = $2
     `,
