@@ -17,26 +17,41 @@ import {
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 @ApiTags('POS Expense')
 @UseGuards(AuthenticationGuard)
 @Controller('pos-expense')
 export class PosExpenseController {
-  constructor(private readonly service: PosExpenseService) {}
+  constructor(
+    private readonly service: PosExpenseService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   @Get('types/:tenantId')
-  listTypes(@Param('tenantId') tenantId: string) {
-    return this.service.listTypesByTenant(tenantId);
+  listTypes(
+    @Session() session: IUserSession,
+    @Param('tenantId') tenantId: string,
+  ) {
+    return this.service.listTypesByTenant(
+      this.tenantScope.resolveRequestedTenant(session, tenantId),
+    );
   }
 
   @Post('types')
-  createType(@Body() data: CreateExpenseTypeDto) {
-    return this.service.createType(data);
+  createType(
+    @Session() session: IUserSession,
+    @Body() data: CreateExpenseTypeDto,
+  ) {
+    return this.service.createType(session.tenant_id, data);
   }
 
   @Get('branch/:branchId')
-  listByBranch(@Param('branchId') branchId: string) {
-    return this.service.listByBranch(branchId);
+  listByBranch(
+    @Session() session: IUserSession,
+    @Param('branchId') branchId: string,
+  ) {
+    return this.service.listByBranch(branchId, session);
   }
 
   @Post()

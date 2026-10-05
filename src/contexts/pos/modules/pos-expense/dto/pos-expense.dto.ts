@@ -7,10 +7,8 @@ import {
   Min,
 } from 'class-validator';
 
+// El tenant del tipo de gasto NO viaja en el body: se toma de la sesion.
 export class CreateExpenseTypeDto {
-  @IsUUID()
-  tenant_id!: string;
-
   @IsString()
   @IsNotEmpty()
   expense_type_name!: string;
