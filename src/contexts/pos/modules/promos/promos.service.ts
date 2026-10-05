@@ -1,8 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import type { ITransaction } from '@crane-technologies/database/dist/interfaces/ITransaction';
@@ -64,9 +60,8 @@ export class PromosService {
     };
   }
 
-  async createPromoWithRule(newPromoDto: NewPromoDto) {
+  async createPromoWithRule(tenant_id: string, newPromoDto: NewPromoDto) {
     const {
-      tenant_id,
       promotion_name,
       promotion_code,
       promotion_description,
@@ -217,10 +212,13 @@ export class PromosService {
     return result.rows[0].promotion_rule_id;
   }
 
-  async deletePromotion(promotionId: string) {
-    const result = await this.db.query(promotions.deletePromo, [promotionId]);
+  async deletePromotion(promotionId: string, scopeTenantId: string | null) {
+    const result = await this.db.query(promotions.deletePromo, [
+      promotionId,
+      scopeTenantId,
+    ]);
     if (result.rows.length === 0) {
-      throw new InternalServerErrorException('Failed to delete promotion');
+      throw new NotFoundException('Promotion not found');
     }
     return {
       message: `Promotion with id: ${result.rows[0].promotion_id} deleted successfully`,
@@ -230,9 +228,9 @@ export class PromosService {
   async updatePromotion(
     promotionId: string,
     updatePromoDto: UpdatePromotionDto,
+    scopeTenantId: string | null,
   ) {
     const {
-      tenant_id,
       promotion_name,
       promotion_code,
       promotion_description,
@@ -252,7 +250,7 @@ export class PromosService {
     try {
       const updatedPromo = await txn.query(promotions.updatePromo, [
         promotionId,
-        tenant_id,
+        scopeTenantId,
         promotion_name,
         promotion_code,
         promotion_description,
@@ -266,7 +264,7 @@ export class PromosService {
       ]);
 
       if (!updatedPromo.rows || updatedPromo.rows.length === 0) {
-        throw new Error('Promotion not found or update failed.');
+        throw new NotFoundException('Promotion not found');
       }
 
       if (rules !== undefined) {
@@ -294,7 +292,7 @@ export class PromosService {
       }
 
       if (targets !== undefined) {
-        const promoTenantId = tenant_id ?? updatedPromo.rows[0]?.tenant_id;
+        const promoTenantId = updatedPromo.rows[0]?.tenant_id;
         if (promoTenantId) {
           await this.replaceTargets(promotionId, promoTenantId, targets, txn);
         }

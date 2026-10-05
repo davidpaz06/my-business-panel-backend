@@ -81,10 +81,9 @@ export class PromoRulesDto {
   min_purchase_amount?: number;
 }
 
+// El tenant de la promocion NO viaja en el body: se toma de la sesion (y en el
+// update no se puede reasignar a otro tenant).
 export class NewPromoDto {
-  @IsUUID()
-  tenant_id!: string;
-
   @IsString()
   promotion_name!: string;
 

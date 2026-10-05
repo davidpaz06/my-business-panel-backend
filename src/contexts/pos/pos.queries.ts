@@ -705,12 +705,17 @@ export const posQueryDefs = {
     deletePromoRules: `
       DELETE FROM pos_schema.promotion_rule WHERE promotion_id = $1
     `,
-    deletePromo:
-      'DELETE FROM pos_schema.promotion WHERE promotion_id = $1 RETURNING promotion_id',
+    // $2 = tenant de alcance (null = superusuario de plataforma).
+    deletePromo: `
+      DELETE FROM pos_schema.promotion
+      WHERE promotion_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)
+      RETURNING promotion_id
+    `,
+    // $2 = tenant de alcance. La promocion NUNCA cambia de tenant: el antiguo
+    // SET tenant_id = COALESCE($2, ...) permitia reasignarla desde el body.
     updatePromo: `
       UPDATE pos_schema.promotion
-      SET tenant_id = COALESCE($2, tenant_id),
-          promotion_name = COALESCE($3, promotion_name),
+      SET promotion_name = COALESCE($3, promotion_name),
           promotion_code = COALESCE($4, promotion_code),
           promotion_description = COALESCE($5, promotion_description),
           promotion_type_id = COALESCE($6, promotion_type_id),
@@ -721,8 +726,8 @@ export const posQueryDefs = {
           is_default = COALESCE($11, is_default),
           is_stackable = COALESCE($12, is_stackable),
           updated_at = NOW()
-      WHERE promotion_id = $1
-      RETURNING promotion_id, tenant_id
+      WHERE promotion_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)
+      RETURNING promotion_id, tenant_id, is_universal
     `,
     /**
      * Active default promotions for a tenant on the current date. Pre-loads rules

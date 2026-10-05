@@ -21,6 +21,9 @@ import { UpdatePromotionDto } from './dto/updatePromo.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
 import { RequiredLevel } from '@/common/decorators/level_metadata.decorator';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import {
   getTenantPromosDoc,
   getPromoInfoDoc,
@@ -35,19 +38,34 @@ import {
 @Controller('promos')
 @UseGuards(AuthenticationGuard)
 export class PromosController {
-  constructor(private readonly promosService: PromosService) {}
+  constructor(
+    private readonly promosService: PromosService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   @Get('analytics/:tenantId')
-  getAnalytics(
+  async getAnalytics(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('interval') interval: string = '30d',
     @Query('isActive') isActive?: string,
     @Query('branchId') branchId?: string,
   ) {
+    const scopedTenantId = this.tenantScope.resolveRequestedTenant(
+      session,
+      tenantId,
+    );
+    if (branchId) {
+      await this.tenantScope.assertOwnedByTenant(
+        'branch',
+        branchId,
+        scopedTenantId,
+      );
+    }
     const activeFilter =
       isActive === 'true' ? true : isActive === 'false' ? false : undefined;
     return this.promosService.getAnalytics(
-      tenantId,
+      scopedTenantId,
       interval,
       activeFilter,
       branchId,
@@ -58,8 +76,13 @@ export class PromosController {
   @ApiResponse(getTenantPromosDoc.responses[200])
   @ApiResponse(getTenantPromosDoc.responses[401])
   @Get(':tenantId')
-  getTenantPromos(@Param('tenantId') tenantId: string) {
-    return this.promosService.getPromos(tenantId);
+  getTenantPromos(
+    @Session() session: IUserSession,
+    @Param('tenantId') tenantId: string,
+  ) {
+    return this.promosService.getPromos(
+      this.tenantScope.resolveRequestedTenant(session, tenantId),
+    );
   }
 
   /**
@@ -67,8 +90,13 @@ export class PromosController {
    * every new sale while they are active.
    */
   @Get('defaults/:tenantId')
-  getActiveDefaults(@Param('tenantId') tenantId: string) {
-    return this.promosService.getActiveDefaults(tenantId);
+  getActiveDefaults(
+    @Session() session: IUserSession,
+    @Param('tenantId') tenantId: string,
+  ) {
+    return this.promosService.getActiveDefaults(
+      this.tenantScope.resolveRequestedTenant(session, tenantId),
+    );
   }
 
   @ApiOperation(getPromoInfoDoc.operation)
@@ -76,7 +104,11 @@ export class PromosController {
   @ApiResponse(getPromoInfoDoc.responses[401])
   @ApiResponse(getPromoInfoDoc.responses[404])
   @Get('info/:promo')
-  getPromoInfo(@Param('promo') promo: string) {
+  async getPromoInfo(
+    @Session() session: IUserSession,
+    @Param('promo') promo: string,
+  ) {
+    await this.tenantScope.assertOwns('promotion', promo, session);
     return this.promosService.getPromoInfo(promo);
   }
 
@@ -95,8 +127,14 @@ export class PromosController {
   @Post()
   @UseGuards(LevelAuthorizationGuard)
   @RequiredLevel(3)
-  createPromoWithRule(@Body() newPromoDto: NewPromoDto) {
-    return this.promosService.createPromoWithRule(newPromoDto);
+  createPromoWithRule(
+    @Session() session: IUserSession,
+    @Body() newPromoDto: NewPromoDto,
+  ) {
+    return this.promosService.createPromoWithRule(
+      session.tenant_id,
+      newPromoDto,
+    );
   }
 
   @ApiOperation(updatePromotionDoc.operation)
@@ -108,10 +146,15 @@ export class PromosController {
   @UseGuards(LevelAuthorizationGuard)
   @RequiredLevel(3)
   updatePromotion(
+    @Session() session: IUserSession,
     @Param('id') id: string,
     @Body() updatePromoDto: UpdatePromotionDto,
   ) {
-    return this.promosService.updatePromotion(id, updatePromoDto);
+    return this.promosService.updatePromotion(
+      id,
+      updatePromoDto,
+      this.tenantScope.scopeFor(session),
+    );
   }
 
   @ApiOperation(deletePromotionDoc.operation)
@@ -121,20 +164,31 @@ export class PromosController {
   @Delete(':id')
   @UseGuards(LevelAuthorizationGuard)
   @RequiredLevel(3)
-  deletePromotion(@Param('id') id: string) {
-    return this.promosService.deletePromotion(id);
+  deletePromotion(@Session() session: IUserSession, @Param('id') id: string) {
+    return this.promosService.deletePromotion(
+      id,
+      this.tenantScope.scopeFor(session),
+    );
   }
 
   @Get(':promoId/targets')
-  getTargets(@Param('promoId') promoId: string) {
+  async getTargets(
+    @Session() session: IUserSession,
+    @Param('promoId') promoId: string,
+  ) {
+    await this.tenantScope.assertOwns('promotion', promoId, session);
     return this.promosService.getTargets(promoId);
   }
 
   @Get('applicable/:tenantId/:variantId')
   getApplicable(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Param('variantId') variantId: string,
   ) {
-    return this.promosService.getApplicableToVariant(tenantId, variantId);
+    return this.promosService.getApplicableToVariant(
+      this.tenantScope.resolveRequestedTenant(session, tenantId),
+      variantId,
+    );
   }
 }
