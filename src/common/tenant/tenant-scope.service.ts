@@ -18,6 +18,31 @@ const OWNERSHIP_QUERIES = {
     SELECT 1 FROM general_schema.tenant_customer
     WHERE tenant_customer_id = $1 AND tenant_id = $2 LIMIT 1
   `,
+  user: `
+    SELECT 1 FROM general_schema.users
+    WHERE user_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  promotion: `
+    SELECT 1 FROM pos_schema.promotion
+    WHERE promotion_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  royaltyRule: `
+    SELECT 1 FROM pos_schema.royalty_rule
+    WHERE royalty_rule_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  royaltyOption: `
+    SELECT 1 FROM pos_schema.royalty_option
+    WHERE royalty_option_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  expenseType: `
+    SELECT 1 FROM pos_schema.expense_type
+    WHERE expense_type_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  expense: `
+    SELECT 1 FROM pos_schema.expense e
+    INNER JOIN general_schema.branch b ON b.branch_id = e.branch_id
+    WHERE e.expense_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
   cashRegister: `
     SELECT 1 FROM pos_schema.cash_register cr
     INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id

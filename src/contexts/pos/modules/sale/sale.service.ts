@@ -18,6 +18,8 @@ import { AccountingJournalService } from '../../../finances/modules/accounting/a
 import { SaleItemService } from '../sale-item/sale-item.service';
 import { WarehouseService } from '@/contexts/inventory/modules/warehouse/warehouse.service';
 import { missingInvoiceFields } from '@/contexts/general/modules/customer/customer-invoice-requirements';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
 
 const { sales, loyaltyScore } = posQueries;
 
@@ -32,7 +34,74 @@ export class SaleService {
     private readonly warehouseService: WarehouseService,
     private readonly invoiceService: InvoiceService,
     private readonly journalService: AccountingJournalService,
+    private readonly tenantScope: TenantScopeService,
   ) {}
+
+  /**
+   * Normaliza y valida la venta contra el tenant de la SESION. Nada de lo que
+   * llega en el body decide a que empresa pertenece la venta: el tenant de la
+   * venta, de cada linea y de cada pago es el de la sesion, y toda referencia
+   * (sucursal, caja, sesion de caja, vendedor, cliente, promociones, regalias)
+   * debe ser de ese tenant.
+   */
+  private async scopeSaleToSession(
+    raw: FullSaleDto,
+    session: IUserSession,
+  ): Promise<FullSaleDto & { tenant_id: string }> {
+    const tenantId = session.tenant_id;
+    const owned = (
+      resource: Parameters<TenantScopeService['assertOwnedByTenant']>[0],
+      id: string,
+    ) => this.tenantScope.assertOwnedByTenant(resource, id, tenantId);
+    const distinct = (ids: Array<string | null | undefined>) => [
+      ...new Set(ids.filter((id): id is string => !!id)),
+    ];
+
+    await owned('branch', raw.branch_id);
+    if (raw.cash_register_id) await owned('cashRegister', raw.cash_register_id);
+    if (raw.cash_register_session_id) {
+      await owned('cashRegisterSession', raw.cash_register_session_id);
+    }
+
+    const sellerUserId = raw.seller_user_id ?? session.user_id;
+    if (sellerUserId !== session.user_id) await owned('user', sellerUserId);
+
+    for (const id of distinct((raw.items ?? []).map((i) => i.promotion_id))) {
+      await owned('promotion', id);
+    }
+    for (const id of distinct(
+      (raw.items ?? []).map((i) => i.royalty_rule_id),
+    )) {
+      await owned('royaltyRule', id);
+    }
+    for (const id of distinct(
+      (raw.items ?? []).map((i) => i.royalty_option_id),
+    )) {
+      await owned('royaltyOption', id);
+    }
+
+    // El pago pertenece al cliente de la venta; uno distinto es un dato
+    // adulterado (o de otra empresa).
+    const payments = (raw.payments ?? []).map((p) => {
+      if (
+        p.tenant_customer_id &&
+        p.tenant_customer_id !== raw.tenant_customer_id
+      ) {
+        throw new BadRequestException(
+          'El cliente de un pago no coincide con el cliente de la venta.',
+        );
+      }
+      return { ...p, tenant_customer_id: raw.tenant_customer_id };
+    });
+
+    return {
+      ...raw,
+      tenant_id: tenantId,
+      seller_user_id: sellerUserId,
+      items: (raw.items ?? []).map((i) => ({ ...i, tenant_id: tenantId })),
+      payments,
+    };
+  }
 
   /**
    * La factura exige los datos del comprador: el cliente debe existir en el
@@ -98,7 +167,8 @@ export class SaleService {
     return saleId;
   }
 
-  async createFullSale(data: FullSaleDto) {
+  async createFullSale(raw: FullSaleDto, session: IUserSession) {
+    const data = await this.scopeSaleToSession(raw, session);
     const { items, payments } = data;
 
     await this.assertCustomerCanBeInvoiced(

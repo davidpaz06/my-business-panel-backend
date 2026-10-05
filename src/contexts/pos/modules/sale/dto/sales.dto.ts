@@ -18,7 +18,8 @@ export class NewSingleSaleDto {
   branch_id!: string;
 
   @IsNotEmpty({
-    message: 'La venta requiere un cliente registrado (venta anonima no permitida)',
+    message:
+      'La venta requiere un cliente registrado (venta anonima no permitida)',
   })
   @IsUUID()
   tenant_customer_id!: string;
@@ -65,12 +66,12 @@ export class FullSaleDto {
   @IsNumber()
   currency_id!: number;
 
-  @IsNotEmpty()
-  @IsUUID()
-  tenant_id!: string;
+  // El tenant NO viaja en el body: se toma de la sesion (SaleService.createFullSale).
+  // Un tenant_id enviado por el cliente lo descarta el ValidationPipe.
 
   @IsNotEmpty({
-    message: 'La venta requiere un cliente registrado (venta anonima no permitida)',
+    message:
+      'La venta requiere un cliente registrado (venta anonima no permitida)',
   })
   @IsUUID()
   tenant_customer_id!: string;

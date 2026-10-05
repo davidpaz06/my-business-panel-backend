@@ -24,6 +24,8 @@ import {
   getAllSalesByBranchDoc,
 } from '@/docs/contexts/pos/sale';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
 
 @ApiTags('Sale')
 @Controller('sale')
@@ -47,8 +49,11 @@ export class SaleController {
   @ApiResponse(createFullSaleDoc.responses[400])
   @ApiResponse(createFullSaleDoc.responses[401])
   @Post()
-  async createFullSale(@Body() req: FullSaleDto) {
-    return this.saleService.createFullSale(req);
+  async createFullSale(
+    @Body() req: FullSaleDto,
+    @Session() session: IUserSession,
+  ) {
+    return this.saleService.createFullSale(req, session);
   }
 
   @Get('tenant/all')
@@ -73,7 +78,7 @@ export class SaleController {
   @ApiResponse(getAllSalesByBranchDoc.responses[401])
   @Get(':branch_id')
   @Paginate({
-    table: `(SELECT s.sale_id, s.sale_date, s.total_amount, s.subtotal_amount, s.tax_amount, s.is_completed, s.is_refunded, s.tenant_customer_id, s.created_at, b.branch_id, b.branch_name, c.currency_code, c.symbol,
+    table: `(SELECT s.sale_id, s.sale_date, s.total_amount, s.subtotal_amount, s.tax_amount, s.is_completed, s.is_refunded, s.tenant_customer_id, s.created_at, b.branch_id, b.branch_name, b.tenant_id, c.currency_code, c.symbol,
         (SELECT rt.return_transaction_id FROM pos_schema.return_transaction rt
           INNER JOIN pos_schema.invoice inv ON inv.invoice_id = rt.invoice_id
           WHERE inv.sale_id = s.sale_id LIMIT 1) AS return_transaction_id
@@ -97,6 +102,9 @@ export class SaleController {
     pkFields: ['sale_id'],
     whereFields: ['branch_id'],
     dateField: 'sale_date',
+    // Filtra siempre por el tenant de la sesion: una sucursal ajena en la URL
+    // devuelve una pagina vacia.
+    tenantField: 'tenant_id',
   })
   getAllSalesByBranch(
     @Param('branch_id') branch_id: string,
