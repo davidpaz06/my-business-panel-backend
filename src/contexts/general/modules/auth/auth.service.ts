@@ -1,5 +1,6 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException } from '@nestjs/common';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change_password.dto';
 import { InvalidCredentialsError } from '@/common/errors/invalid_credentials.error';
 import { InvalidSessionError } from '@/common/errors/invalid_session.error';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
@@ -11,7 +12,7 @@ import Database from '@crane-technologies/database';
 import { compare, hash } from 'bcrypt';
 import { generalQueries } from '@general/general.queries';
 
-const { refreshToken: refreshTokenQueries } = generalQueries;
+const { refreshToken: refreshTokenQueries, users } = generalQueries;
 
 const REFRESH_TOKEN_HASH_ROUNDS = 10;
 
@@ -152,6 +153,44 @@ export class AuthService {
     };
 
     await this.db.query(refreshTokenQueries.revokeById, [matchedTokenId]);
+    return this.issueTokens(userSession);
+  }
+
+  /**
+   * Cambia la clave del propio usuario. Revoca todos sus refresh tokens y emite
+   * un par nuevo para que la sesion actual no se cierre.
+   */
+  async changePassword(
+    userSession: IUserSession,
+    dto: ChangePasswordDto,
+  ): Promise<IAuthTokens> {
+    const { rows } = await this.db.query(users.passwordHashById, [
+      userSession.user_id,
+    ]);
+    const storedHash: string | undefined = rows[0]?.password_hash;
+    if (!storedHash) throw new InvalidSessionError('INVALID');
+
+    const validCurrent = await this.validatePassword(
+      storedHash,
+      dto.current_password,
+    );
+    if (!validCurrent) {
+      throw new BadRequestException('La contraseña actual es incorrecta');
+    }
+    if (await this.validatePassword(storedHash, dto.new_password)) {
+      throw new BadRequestException(
+        'La nueva contraseña debe ser diferente a la actual',
+      );
+    }
+
+    const newHash = await hash(
+      dto.new_password,
+      this.stateService.getConstant<number>('PASSWORD_SALT_ROUNDS'),
+    );
+    await this.db.query(users.updatePassword, [newHash, userSession.user_id]);
+    await this.db.query(refreshTokenQueries.revokeAllByUser, [
+      userSession.user_id,
+    ]);
     return this.issueTokens(userSession);
   }
 

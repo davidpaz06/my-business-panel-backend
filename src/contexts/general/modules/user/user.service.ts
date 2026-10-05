@@ -1,4 +1,9 @@
-import { Injectable, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create_user.dto';
 import Database from '@crane-technologies/database';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
@@ -376,6 +381,86 @@ export class UserService {
       assignRoleDto.user_id,
     ]);
     return { message: 'role assigned successfully!' };
+  }
+
+  /** Nadie puede otorgar un rol de jerarquia superior a la propia. */
+  assertCanGrantRole(session: IUserSession, roleId: number): void {
+    const own = this.state.getRole(session.role_id).role_hierarchy;
+    const target = this.state.getRole(roleId).role_hierarchy;
+    if (target > own) {
+      throw new ForbiddenException('No puede asignar un rol superior al suyo');
+    }
+  }
+
+  /**
+   * Un usuario solo se crea en el tenant de la sesion (el superusuario de
+   * plataforma puede elegir otro) y con un rol que el solicitante pueda otorgar.
+   */
+  assertCanCreateFor(
+    session: IUserSession,
+    dto: {
+      tenant_id: string;
+      role_id: number;
+      employeeInfo?: { tenant_id: string };
+    },
+  ): void {
+    const isSuperuser =
+      this.state.getRole(session.role_id).role_name === 'superuser';
+    const tenantIds = [dto.tenant_id, dto.employeeInfo?.tenant_id].filter(
+      (id): id is string => !!id,
+    );
+    if (!isSuperuser && tenantIds.some((id) => id !== session.tenant_id)) {
+      throw new NotFoundException('Recurso no encontrado');
+    }
+    this.assertCanGrantRole(session, dto.role_id);
+  }
+
+  /**
+   * Un admin restablece la clave de un empleado de su mismo tenant. Revoca los
+   * refresh tokens del empleado para cerrar sus sesiones activas.
+   */
+  async resetEmployeePassword(
+    session: IUserSession,
+    targetUserId: string,
+    newPassword: string,
+  ) {
+    if (!isUUID(targetUserId)) throw new NotFoundException('User not found');
+
+    const { rows } = await this.db.query(users.byIdScoped, [targetUserId]);
+    const target = rows[0];
+
+    // Otro tenant se responde igual que inexistente para no filtrar su existencia.
+    if (!target || target.tenant_id !== session.tenant_id) {
+      throw new NotFoundException('User not found');
+    }
+    if (this.state.getRole(target.role_id).role_name !== 'employee') {
+      throw new ForbiddenException(
+        'Only employee passwords can be reset by an admin',
+      );
+    }
+
+    const password_hash = await hash(
+      newPassword,
+      this.state.getConstant<number>('PASSWORD_SALT_ROUNDS'),
+    );
+
+    const txn = await this.db.transaction();
+    let committed = false;
+    try {
+      await txn.query(users.updatePassword, [password_hash, targetUserId]);
+      await txn.query(generalQueries.refreshToken.revokeAllByUser, [
+        targetUserId,
+      ]);
+      await txn.commit();
+      committed = true;
+      return {
+        message: 'password updated successfully',
+        user_id: targetUserId,
+      };
+    } catch (error) {
+      if (!committed) await this.rollbackSafely(txn, 'resetEmployeePassword');
+      throw error;
+    }
   }
 
   async deleteUser(userId: string) {

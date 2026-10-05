@@ -5,6 +5,7 @@ import {
   IAuthTokens,
 } from '@/contexts/general/modules/auth/auth.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change_password.dto';
 import { Response } from 'express';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { RefreshTokenGuard } from '@/common/guards/refresh_token.guard';
@@ -75,6 +76,18 @@ export class AuthController {
     const tokens = await this.authService.refresh(refreshTokenCookie);
     this.setAuthCookies(response, tokens);
     return { message: 'Token refreshed' };
+  }
+
+  @UseGuards(AuthenticationGuard)
+  @Post('/change-password')
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Session() user: IUserSession,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const tokens = await this.authService.changePassword(user, dto);
+    this.setAuthCookies(response, tokens);
+    return { message: 'Password changed successfully' };
   }
 
   @ApiOperation(logoutDoc.operation)

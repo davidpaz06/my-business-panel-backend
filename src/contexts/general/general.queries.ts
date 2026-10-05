@@ -23,6 +23,13 @@ export const generalQueryDefs = {
       'SELECT user_id, email, role_id, created_at FROM general_schema.users WHERE tenant_id = $1',
     byEmailWithPassword:
       'SELECT * FROM general_schema.users WHERE email = $1 LIMIT 1',
+    passwordHashById:
+      'SELECT password_hash FROM general_schema.users WHERE user_id = $1 LIMIT 1',
+    updatePassword: `
+      UPDATE general_schema.users
+      SET password_hash = $1, updated_at = NOW()
+      WHERE user_id = $2
+    `,
     create: `
       INSERT INTO general_schema.users 
       (tenant_id, email, password_hash, role_id, created_at, updated_at) 
@@ -40,6 +47,8 @@ export const generalQueryDefs = {
     `,
     assignRole:
       'UPDATE general_schema.users SET role_id = $1 WHERE user_id = $2',
+    byIdScoped:
+      'SELECT user_id, tenant_id, role_id FROM general_schema.users WHERE user_id = $1 LIMIT 1',
     delete:
       'DELETE FROM general_schema.users WHERE user_id = $1 RETURNING user_id, email',
     getByEmails: `
