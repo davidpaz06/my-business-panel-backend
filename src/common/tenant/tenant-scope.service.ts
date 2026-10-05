@@ -18,6 +18,18 @@ const OWNERSHIP_QUERIES = {
     SELECT 1 FROM general_schema.tenant_customer
     WHERE tenant_customer_id = $1 AND tenant_id = $2 LIMIT 1
   `,
+  cashRegister: `
+    SELECT 1 FROM pos_schema.cash_register cr
+    INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
+    WHERE cr.cash_register_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
+  cashRegisterSession: `
+    SELECT 1 FROM pos_schema.cash_register_session crs
+    INNER JOIN pos_schema.cash_register cr
+      ON cr.cash_register_id = crs.cash_register_id
+    INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
+    WHERE crs.cash_register_session_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
 } as const;
 
 export type OwnedResource = keyof typeof OWNERSHIP_QUERIES;

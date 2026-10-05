@@ -462,32 +462,41 @@ export const posQueryDefs = {
   },
 
   cashRegister: {
+    // Todas las consultas de cajas se acotan al tenant a traves de la sucursal.
+    // El parametro de tenant es null solo para el superusuario de plataforma.
     all: `
     SELECT cr.*, b.branch_name FROM pos_schema.cash_register cr
     INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
+    WHERE ($1::uuid IS NULL OR b.tenant_id = $1)
     `,
     allPaginated: `
     SELECT cr.*, b.branch_name FROM pos_schema.cash_register cr
     INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
     WHERE ($1::uuid IS NULL OR cr.branch_id = $1)
       AND ($2::boolean IS NULL OR cr.is_active = $2)
+      AND ($5::uuid IS NULL OR b.tenant_id = $5)
     ORDER BY b.branch_name, cr.register_name
     LIMIT $3 OFFSET $4
     `,
     countPaginated: `
     SELECT COUNT(*)::int AS total FROM pos_schema.cash_register cr
+    INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
     WHERE ($1::uuid IS NULL OR cr.branch_id = $1)
       AND ($2::boolean IS NULL OR cr.is_active = $2)
+      AND ($3::uuid IS NULL OR b.tenant_id = $3)
     `,
     byId: `
     SELECT cr.*, b.branch_name FROM pos_schema.cash_register cr
     INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
-    WHERE cr.cash_register_id = $1 LIMIT 1
+    WHERE cr.cash_register_id = $1
+      AND ($2::uuid IS NULL OR b.tenant_id = $2)
+    LIMIT 1
     `,
     byBranch: `
     SELECT cr.*, b.branch_name FROM pos_schema.cash_register cr
     INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
     WHERE cr.branch_id = $1
+      AND ($2::uuid IS NULL OR b.tenant_id = $2)
     `,
     /**
      * Returns the plain-text key for a cash register. Used by the service to

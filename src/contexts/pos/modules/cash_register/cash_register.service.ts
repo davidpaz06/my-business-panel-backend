@@ -14,6 +14,7 @@ import { InvalidCashRegisterSessionError } from '@/common/errors/invalid_cash_re
 import { RegisterTransactionDto } from './dto/register_transaction.dto';
 import { BranchService } from '@/contexts/general/modules/branch/branch.service';
 import { StateService } from '@/contexts/general/modules/state/state.service';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 const { cashRegister } = posQueries;
 
@@ -25,7 +26,21 @@ export class CashRegisterService {
     @Inject(DATABASE) private readonly db: Database,
     private readonly branchService: BranchService,
     private readonly stateService: StateService,
+    private readonly tenantScope: TenantScopeService,
   ) {}
+
+  /**
+   * La clave de caja es un secreto que solo gestionan admin y superusuario.
+   * Al resto se le oculta y se le informa unicamente si la caja la exige.
+   */
+  private redactKey<T extends { cash_register_key?: string | null }>(
+    row: T,
+    session: IUserSession,
+  ): T & { requires_key: boolean } {
+    const requires_key = !!row.cash_register_key;
+    if (this.isAdmin(session)) return { ...row, requires_key };
+    return { ...row, cash_register_key: null, requires_key };
+  }
 
   private isAdmin(session: IUserSession): boolean {
     try {
@@ -61,12 +76,15 @@ export class CashRegisterService {
     }
   }
 
-  async findAll(): Promise<{ results: CashRegister[] }> {
-    const { rows } = await this.db.query(cashRegister.all, []);
-    return { results: rows };
+  async findAll(session: IUserSession): Promise<{ results: CashRegister[] }> {
+    const { rows } = await this.db.query(cashRegister.all, [
+      this.tenantScope.scopeFor(session),
+    ]);
+    return { results: rows.map((r) => this.redactKey(r, session)) };
   }
 
   async findAllPaginated(
+    session: IUserSession,
     branchId?: string,
     isActive?: boolean,
     page = 1,
@@ -80,6 +98,7 @@ export class CashRegisterService {
     const offset = (page - 1) * limit;
     const branchParam = branchId ?? null;
     const isActiveParam = typeof isActive === 'boolean' ? isActive : null;
+    const scope = this.tenantScope.scopeFor(session);
 
     const [dataResult, countResult] = await Promise.all([
       this.db.query(cashRegister.allPaginated, [
@@ -87,27 +106,45 @@ export class CashRegisterService {
         isActiveParam,
         limit,
         offset,
+        scope,
       ]),
-      this.db.query(cashRegister.countPaginated, [branchParam, isActiveParam]),
+      this.db.query(cashRegister.countPaginated, [
+        branchParam,
+        isActiveParam,
+        scope,
+      ]),
     ]);
 
     return {
-      results: dataResult.rows,
+      results: dataResult.rows.map((r) => this.redactKey(r, session)),
       total: countResult.rows[0]?.total ?? 0,
       page,
       limit,
     };
   }
 
-  async findById(cash_register_id: string): Promise<{ result: CashRegister }> {
-    const { rows } = await this.db.query(cashRegister.byId, [cash_register_id]);
-    return { result: rows[0] };
+  async findById(
+    session: IUserSession,
+    cash_register_id: string,
+  ): Promise<{ result: CashRegister }> {
+    const { rows } = await this.db.query(cashRegister.byId, [
+      cash_register_id,
+      this.tenantScope.scopeFor(session),
+    ]);
+    if (rows.length === 0)
+      throw new InvalidCashRegisterError('Cash register not found');
+    return { result: this.redactKey(rows[0], session) };
   }
 
-  async findByBranch(branch_id: string): Promise<{ results: CashRegister[] }> {
-    // await this.checkBranchId(branch_id);
-    const { rows } = await this.db.query(cashRegister.byBranch, [branch_id]);
-    return { results: rows };
+  async findByBranch(
+    session: IUserSession,
+    branch_id: string,
+  ): Promise<{ results: CashRegister[] }> {
+    const { rows } = await this.db.query(cashRegister.byBranch, [
+      branch_id,
+      this.tenantScope.scopeFor(session),
+    ]);
+    return { results: rows.map((r) => this.redactKey(r, session)) };
   }
 
   async findSessions(
@@ -152,7 +189,12 @@ export class CashRegisterService {
     const { cash_register_id, opened_at, opening_amount, cash_register_key } =
       startSessionDto;
 
-    await this.checkId(cash_register_id);
+    await this.tenantScope.assertOwns(
+      'cashRegister',
+      cash_register_id,
+      session,
+    );
+    await this.checkId(cash_register_id, session);
     await this.assertKeyMatches(session, cash_register_id, cash_register_key);
 
     const { rows } = await this.db.query(cashRegister.startSession, [
@@ -172,6 +214,11 @@ export class CashRegisterService {
     const { cash_register_session_id, closing_amount, cash_register_key } =
       closeSession;
 
+    await this.tenantScope.assertOwns(
+      'cashRegisterSession',
+      cash_register_session_id,
+      session,
+    );
     const cash_session = await this.getSession(cash_register_session_id);
     if (!cash_session.is_active) throw new InvalidCashRegisterSessionError();
 
@@ -200,7 +247,31 @@ export class CashRegisterService {
     return { closed };
   }
 
-  async getSessionPaymentMethodSales(cash_register_session_id: string) {
+  async getSessionPaymentMethods(
+    session: IUserSession,
+    cash_register_session_id: string,
+  ) {
+    await this.tenantScope.assertOwns(
+      'cashRegisterSession',
+      cash_register_session_id,
+      session,
+    );
+    return this.getSessionPaymentMethodSales(cash_register_session_id);
+  }
+
+  async getSessionReport(
+    session: IUserSession,
+    cash_register_session_id: string,
+  ) {
+    await this.tenantScope.assertOwns(
+      'cashRegisterSession',
+      cash_register_session_id,
+      session,
+    );
+    return this.getSessionGroupSales(cash_register_session_id);
+  }
+
+  private async getSessionPaymentMethodSales(cash_register_session_id: string) {
     const { rows } = await this.db.query(
       cashRegister.getSessionPaymentMethodSales,
       [cash_register_session_id],
@@ -208,14 +279,14 @@ export class CashRegisterService {
     return rows;
   }
 
-  async getSessionGroupSales(cash_register_session_id: string) {
+  private async getSessionGroupSales(cash_register_session_id: string) {
     const { rows } = await this.db.query(cashRegister.getSessionGroupSales, [
       cash_register_session_id,
     ]);
     return rows;
   }
 
-  async update(updateDto: UpdateCashRegisterDto) {
+  async update(session: IUserSession, updateDto: UpdateCashRegisterDto) {
     const {
       branch_id,
       cash_register_id,
@@ -223,6 +294,16 @@ export class CashRegisterService {
       is_active,
       cash_register_key,
     } = updateDto;
+
+    await this.tenantScope.assertOwns(
+      'cashRegister',
+      cash_register_id,
+      session,
+    );
+    // Mover la caja a una sucursal de otro tenant la sacaria de su dueño.
+    if (branch_id) {
+      await this.tenantScope.assertOwns('branch', branch_id, session);
+    }
 
     const normalisedKey =
       cash_register_key === undefined
@@ -241,7 +322,12 @@ export class CashRegisterService {
     return { updated: rows[0] };
   }
 
-  async remove(cash_register_id: string) {
+  async remove(session: IUserSession, cash_register_id: string) {
+    await this.tenantScope.assertOwns(
+      'cashRegister',
+      cash_register_id,
+      session,
+    );
     const { rows } = await this.db.query(cashRegister.delete, [
       cash_register_id,
     ]);
@@ -269,9 +355,13 @@ export class CashRegisterService {
     return { transaction: rows[0] };
   }
 
-  private async checkId(cash_register_id: string): Promise<void> {
+  private async checkId(
+    cash_register_id: string,
+    session: IUserSession,
+  ): Promise<void> {
     const { rowCount } = await this.db.query(cashRegister.byId, [
       cash_register_id,
+      this.tenantScope.scopeFor(session),
     ]);
     if (rowCount === 0)
       throw new InvalidCashRegisterError('Cash register not found');
