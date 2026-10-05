@@ -43,6 +43,14 @@ const OWNERSHIP_QUERIES = {
     INNER JOIN general_schema.branch b ON b.branch_id = e.branch_id
     WHERE e.expense_id = $1 AND b.tenant_id = $2 LIMIT 1
   `,
+  tenantProductGroup: `
+    SELECT 1 FROM general_schema.tenant_product_group
+    WHERE tenant_product_group_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  tenantProductGroupType: `
+    SELECT 1 FROM general_schema.tenant_product_group_type
+    WHERE tenant_product_group_type_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
   cashRegister: `
     SELECT 1 FROM pos_schema.cash_register cr
     INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id

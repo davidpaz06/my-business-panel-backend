@@ -8,11 +8,8 @@ import {
   Min,
 } from 'class-validator';
 
+// El tenant de la regla NO viaja en el body: se toma de la sesion.
 export class CreateRoyaltyRuleDto {
-  @IsUUID()
-  @IsNotEmpty()
-  tenant_id!: string;
-
   @IsNumber()
   @Min(0.01)
   min_amount!: number;

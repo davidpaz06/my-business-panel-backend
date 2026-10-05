@@ -56,9 +56,9 @@ export class PosRoyaltyService {
     return rows[0];
   }
 
-  async createRule(dto: CreateRoyaltyRuleDto) {
+  async createRule(tenantId: string, dto: CreateRoyaltyRuleDto) {
     const { rows } = await this.db.query(q.createRule, [
-      dto.tenant_id,
+      tenantId,
       dto.min_amount,
     ]);
     return rows[0];
