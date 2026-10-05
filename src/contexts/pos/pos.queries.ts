@@ -194,6 +194,17 @@ export const posQueryDefs = {
         s.sale_date,
         s.seller_user_id,
         seller.email AS seller_email,
+        -- Caja registradora que efectuo la venta (sesion vinculada al cobrar).
+        (
+          SELECT cr.register_name
+          FROM pos_schema.cash_register_sale crsale
+          INNER JOIN pos_schema.cash_register_session crs
+            ON crs.cash_register_session_id = crsale.cash_register_session_id
+          INNER JOIN pos_schema.cash_register cr
+            ON cr.cash_register_id = crs.cash_register_id
+          WHERE crsale.sale_id = s.sale_id
+          LIMIT 1
+        ) AS cash_register_name,
         c.currency_code,
         c.symbol AS currency_symbol,
         COALESCE((

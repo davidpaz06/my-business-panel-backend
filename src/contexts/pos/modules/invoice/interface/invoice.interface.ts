@@ -83,6 +83,7 @@ export interface FullInvoice {
   sale_date: string;
   seller_user_id: string | null;
   seller_email: string | null;
+  cash_register_name: string | null;
   currency_code: string | null;
   currency_symbol: string | null;
   items: FullInvoiceItem[];
