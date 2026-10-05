@@ -35,7 +35,6 @@ const NOT_YET_AUDITED = [
 // POS pendiente de su fase (se elimina de aqui al cerrarla).
 const POS_PENDING_PHASE = [
   'contexts/pos/modules/loyal-program/loyalty-program.controller.ts',
-  'contexts/pos/modules/returns/returns.controller.ts',
 ];
 
 const SRC = join(__dirname, '..', '..');

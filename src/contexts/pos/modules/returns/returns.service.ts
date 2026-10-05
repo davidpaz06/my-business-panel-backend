@@ -14,6 +14,7 @@ import {
 } from './dto/return_transaction.dto';
 import { bulkReturns, posQueries } from '@pos/pos.queries';
 import { FindReturnsDto } from './dto/find_returns.dto';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 const { returns } = posQueries;
 
@@ -43,18 +44,35 @@ interface SaleContextRow {
 
 @Injectable()
 export class ReturnsService {
-  constructor(@Inject(DATABASE) private readonly db: Database) {}
+  constructor(
+    @Inject(DATABASE) private readonly db: Database,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
+
+  /**
+   * Contexto de la venta acotado al tenant (scopeTenantId null = superusuario
+   * de plataforma). Una venta de otra empresa responde 404 como una inexistente.
+   */
+  private async loadSaleContext(
+    saleId: string,
+    scopeTenantId: string | null,
+  ): Promise<SaleContextRow> {
+    const ctxResult = await this.db.query(returns.getSaleContext, [
+      saleId,
+      scopeTenantId,
+    ]);
+    if (!ctxResult.rows.length) {
+      throw new NotFoundException(`Sale not found: ${saleId}`);
+    }
+    return ctxResult.rows[0];
+  }
 
   /**
    * Returns the full refund context for a given sale: sale info, customer,
    * invoice (always exists for completed sales), and the line items.
    */
-  async getSaleRefundContext(saleId: string) {
-    const ctxResult = await this.db.query(returns.getSaleContext, [saleId]);
-    if (!ctxResult.rows.length) {
-      throw new NotFoundException(`Sale not found: ${saleId}`);
-    }
-    const row: SaleContextRow = ctxResult.rows[0];
+  async getSaleRefundContext(saleId: string, scopeTenantId: string | null) {
+    const row = await this.loadSaleContext(saleId, scopeTenantId);
 
     const itemsResult = await this.db.query(returns.getSaleItemsForRefund, [
       saleId,
@@ -110,7 +128,10 @@ export class ReturnsService {
    * Creates a partial return for a sale. Auto-sets return_date server-side.
    * Resolves the invoice ID from the sale.
    */
-  async createPartialRefund(data: ReturnTransactionDto) {
+  async createPartialRefund(
+    data: ReturnTransactionDto,
+    scopeTenantId: string | null,
+  ) {
     const {
       sale_id,
       return_products,
@@ -126,11 +147,30 @@ export class ReturnsService {
     }
 
     // Resolve invoice references and customer from the sale
-    const ctxResult = await this.db.query(returns.getSaleContext, [sale_id]);
-    if (!ctxResult.rows.length) {
-      throw new NotFoundException(`Sale not found: ${sale_id}`);
+    const ctx = await this.loadSaleContext(sale_id, scopeTenantId);
+
+    // Las lineas devueltas deben ser de ESTA venta: sin esto se podrian
+    // descontar lineas de ventas de otras empresas (el trigger de devolucion
+    // reconcilia por sale_item_id).
+    const itemIds = [...new Set(return_products.map((p) => p.sale_item_id))];
+    const owned = await this.db.query(returns.countSaleItemsOfSale, [
+      sale_id,
+      itemIds,
+    ]);
+    if ((owned.rows[0]?.total ?? 0) !== itemIds.length) {
+      throw new BadRequestException(
+        'Alguna linea a reembolsar no pertenece a la venta indicada',
+      );
     }
-    const ctx: SaleContextRow = ctxResult.rows[0];
+
+    // Un cliente enviado por el cliente HTTP debe ser del tenant de la venta.
+    if (data.tenant_customer_id) {
+      await this.tenantScope.assertOwnedByTenant(
+        'customer',
+        data.tenant_customer_id,
+        ctx.tenant_id,
+      );
+    }
 
     if (!ctx.invoice_id) {
       throw new BadRequestException(
@@ -198,12 +238,12 @@ export class ReturnsService {
    * record. Invoices are preserved with the is_refunded flag on the sale
    * serving as the authoritative cancelled indicator.
    */
-  async processFullRefund(saleId: string, description: string) {
-    const ctxResult = await this.db.query(returns.getSaleContext, [saleId]);
-    if (!ctxResult.rows.length) {
-      throw new NotFoundException(`Sale not found: ${saleId}`);
-    }
-    const ctx: SaleContextRow = ctxResult.rows[0];
+  async processFullRefund(
+    saleId: string,
+    description: string,
+    scopeTenantId: string | null,
+  ) {
+    const ctx = await this.loadSaleContext(saleId, scopeTenantId);
 
     if (!ctx.invoice_id) {
       throw new BadRequestException(
@@ -243,10 +283,15 @@ export class ReturnsService {
     }
   }
 
-  async getReturnDetail(returnTransactionId: string) {
-    const [headerResult, productsResult] = await Promise.all([
-      this.db.query(returns.getById, [returnTransactionId]),
-      this.db.query(returns.getProducts, [returnTransactionId]),
+  async getReturnDetail(
+    returnTransactionId: string,
+    scopeTenantId: string | null,
+  ) {
+    // Primero la cabecera acotada al tenant; los productos solo se leen si la
+    // devolucion es del tenant.
+    const headerResult = await this.db.query(returns.getById, [
+      returnTransactionId,
+      scopeTenantId,
     ]);
 
     if (!headerResult.rows.length) {
@@ -255,13 +300,20 @@ export class ReturnsService {
       );
     }
 
+    const productsResult = await this.db.query(returns.getProducts, [
+      returnTransactionId,
+    ]);
+
     return {
       transaction: headerResult.rows[0],
       products: productsResult.rows,
     };
   }
 
-  async findReturns(findReturnsDto: FindReturnsDto) {
+  async findReturns(
+    findReturnsDto: FindReturnsDto,
+    scopeTenantId: string | null,
+  ) {
     const { rows } = await this.db.query(returns.find, [
       findReturnsDto.invoice_id,
       findReturnsDto.tenant_customer_id,
@@ -269,6 +321,7 @@ export class ReturnsService {
       findReturnsDto.refund_method,
       findReturnsDto.date_from,
       findReturnsDto.date_to,
+      scopeTenantId,
     ]);
     return { results: rows };
   }

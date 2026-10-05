@@ -322,8 +322,12 @@ export const posQueryDefs = {
       LEFT JOIN pos_schema.return_status rs ON rs.return_status_id = rt.return_status_id
       LEFT JOIN general_schema.payment_method pm ON pm.payment_method_id = rt.refund_method
       LEFT JOIN general_schema.tenant_customer tc ON tc.tenant_customer_id = rt.tenant_customer_id
+      INNER JOIN pos_schema.invoice inv ON inv.invoice_id = rt.invoice_id
+      INNER JOIN pos_schema.sale s ON s.sale_id = inv.sale_id
+      INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
       WHERE
-          ($1::uuid IS NULL OR rt.invoice_id = $1)
+          ($7::uuid IS NULL OR b.tenant_id = $7)
+          AND ($1::uuid IS NULL OR rt.invoice_id = $1)
           AND ($2::uuid IS NULL OR rt.tenant_customer_id = $2)
           AND ($3::int IS NULL OR rt.return_status_id = $3)
           AND ($4::int IS NULL OR rt.refund_method = $4)
@@ -352,7 +356,11 @@ export const posQueryDefs = {
       LEFT JOIN pos_schema.return_status rs ON rs.return_status_id = rt.return_status_id
       LEFT JOIN general_schema.payment_method pm ON pm.payment_method_id = rt.refund_method
       LEFT JOIN general_schema.tenant_customer tc ON tc.tenant_customer_id = rt.tenant_customer_id
+      INNER JOIN pos_schema.invoice inv ON inv.invoice_id = rt.invoice_id
+      INNER JOIN pos_schema.sale s ON s.sale_id = inv.sale_id
+      INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
       WHERE rt.return_transaction_id = $1
+        AND ($2::uuid IS NULL OR b.tenant_id = $2)
       LIMIT 1
     `,
 
@@ -403,6 +411,7 @@ export const posQueryDefs = {
       LEFT JOIN general_schema.tenant_customer tc ON tc.tenant_customer_id = s.tenant_customer_id
       LEFT JOIN pos_schema.invoice inv ON inv.sale_id = s.sale_id
       WHERE s.sale_id = $1
+        AND ($2::uuid IS NULL OR b.tenant_id = $2)
       LIMIT 1
     `,
 
@@ -427,6 +436,14 @@ export const posQueryDefs = {
         ON dii.sale_item_id = si.sale_item_id
       WHERE si.sale_id = $1
       ORDER BY si.created_at
+    `,
+
+    // Cuantas de las lineas pedidas pertenecen realmente a la venta ($1 = sale_id,
+    // $2 = uuid[] de sale_item_id). Evita devolver lineas de otra venta/tenant.
+    countSaleItemsOfSale: `
+      SELECT COUNT(*)::int AS total
+      FROM pos_schema.sale_item
+      WHERE sale_id = $1 AND sale_item_id = ANY($2::uuid[])
     `,
 
     markSaleRefunded: `
