@@ -17,9 +17,11 @@ export class NewSingleSaleDto {
   @IsUUID()
   branch_id!: string;
 
-  @IsOptional()
+  @IsNotEmpty({
+    message: 'La venta requiere un cliente registrado (venta anonima no permitida)',
+  })
   @IsUUID()
-  tenant_customer_id?: string | null;
+  tenant_customer_id!: string;
 
   @IsOptional()
   @IsUUID()
@@ -67,9 +69,11 @@ export class FullSaleDto {
   @IsUUID()
   tenant_id!: string;
 
-  @IsOptional()
+  @IsNotEmpty({
+    message: 'La venta requiere un cliente registrado (venta anonima no permitida)',
+  })
   @IsUUID()
-  tenant_customer_id?: string | null;
+  tenant_customer_id!: string;
 
   @IsOptional()
   @IsUUID()

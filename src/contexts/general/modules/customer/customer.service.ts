@@ -12,6 +12,7 @@ import Database from '@crane-technologies/database/dist/components/Database';
 import { generalQueries } from '@general/general.queries';
 import { UpdateClientDto } from './dto/updateClient.dto';
 import { ClientCreateError } from '@/common/errors/client_create.error';
+import { isLegalPerson } from './customer-invoice-requirements';
 
 const { customer } = generalQueries;
 
@@ -136,7 +137,13 @@ export class CustomerService {
       address,
       segment_id,
       is_tenant,
+      business_name,
     } = customerData;
+
+    await this.assertBusinessNameForLegalPerson(
+      document_type_id,
+      business_name,
+    );
 
     const { rows } = await this.db.query(customer.create, [
       tenant_id,
@@ -151,10 +158,30 @@ export class CustomerService {
       address || null,
       is_tenant || false,
       segment_id || null,
+      business_name?.trim() || null,
     ]);
 
     if (rows.length == 0) throw new ClientCreateError(email!);
     return rows[0];
+  }
+
+  /**
+   * Un cliente J/G/C (persona juridica) se factura por razon social. El
+   * codigo del tipo de documento vive en identification_type, no en el DTO.
+   */
+  private async assertBusinessNameForLegalPerson(
+    documentTypeId: number | undefined,
+    businessName: string | undefined,
+  ) {
+    if (documentTypeId === undefined) return;
+    const { rows } = await this.db.query(customer.identificationCode, [
+      documentTypeId,
+    ]);
+    if (isLegalPerson(rows[0]?.ident_code) && !businessName?.trim()) {
+      throw new BadRequestException(
+        'La razon social es obligatoria para clientes con RIF juridico, gubernamental o consejo comunal (J/G/C).',
+      );
+    }
   }
 
   async updateCustomer(customerId: string, customerData: UpdateClientDto) {
@@ -169,6 +196,7 @@ export class CustomerService {
     const validDbColumns = new Set([
       'first_name',
       'last_name',
+      'business_name',
       'email',
       'phone',
       'address',
@@ -191,6 +219,20 @@ export class CustomerService {
       throw new BadRequestException('No valid fields to update');
     }
 
+    // Solo se revalida la razon social cuando se toca el tipo de documento o
+    // la propia razon social: editar el telefono de un cliente historico sin
+    // direccion no debe quedar bloqueado.
+    if (
+      updateKeys.includes('document_type_id') ||
+      updateKeys.includes('business_name')
+    ) {
+      const current = await this.findCustomerById(customerId);
+      await this.assertBusinessNameForLegalPerson(
+        updates.document_type_id ?? current.identification_type ?? undefined,
+        updates.business_name ?? current.business_name ?? undefined,
+      );
+    }
+
     const setClause: string[] = [];
     const paramsArray: any[] = [];
     let index = 1;
@@ -211,7 +253,7 @@ export class CustomerService {
       WHERE tenant_customer_id = $${index}
       RETURNING
         tenant_customer_id AS customer_id, tenant_id,
-        first_name, last_name,
+        first_name, last_name, business_name,
         identification_type_id AS identification_type,
         document_number,
         econ_activity, email, phone, birthdate, address,

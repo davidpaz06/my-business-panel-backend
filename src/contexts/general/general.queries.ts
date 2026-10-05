@@ -64,7 +64,7 @@ export const generalQueryDefs = {
     all: `
       SELECT
         tenant_customer_id AS customer_id, tenant_id,
-        first_name, last_name,
+        first_name, last_name, business_name,
         identification_type_id AS identification_type,
         document_number,
         econ_activity, email, phone, birthdate, address,
@@ -76,7 +76,7 @@ export const generalQueryDefs = {
     allPaginated: `
       SELECT
         tenant_customer_id AS customer_id, tenant_id,
-        first_name, last_name,
+        first_name, last_name, business_name,
         identification_type_id AS identification_type,
         document_number,
         econ_activity, email, phone, birthdate, address,
@@ -91,7 +91,7 @@ export const generalQueryDefs = {
     search: `
       SELECT
         tenant_customer_id AS customer_id, tenant_id,
-        first_name, last_name,
+        first_name, last_name, business_name,
         identification_type_id AS identification_type,
         document_number,
         econ_activity, email, phone, birthdate, address,
@@ -103,6 +103,7 @@ export const generalQueryDefs = {
         AND (
           first_name ILIKE '%' || $2 || '%' OR
           last_name ILIKE '%' || $2 || '%' OR
+          business_name ILIKE '%' || $2 || '%' OR
           document_number ILIKE '%' || $2 || '%' OR
           email ILIKE '%' || $2 || '%' OR
           phone ILIKE '%' || $2 || '%'
@@ -113,7 +114,7 @@ export const generalQueryDefs = {
     allGlobal: `
       SELECT
         tc.tenant_customer_id AS customer_id, tc.tenant_id,
-        tc.first_name, tc.last_name,
+        tc.first_name, tc.last_name, tc.business_name,
         tc.identification_type_id AS identification_type,
         tc.document_number,
         tc.econ_activity, tc.email, tc.phone, tc.birthdate, tc.address,
@@ -135,6 +136,7 @@ export const generalQueryDefs = {
         AND (
           first_name ILIKE '%' || $2 || '%' OR
           last_name ILIKE '%' || $2 || '%' OR
+          business_name ILIKE '%' || $2 || '%' OR
           document_number ILIKE '%' || $2 || '%' OR
           email ILIKE '%' || $2 || '%' OR
           phone ILIKE '%' || $2 || '%'
@@ -145,7 +147,7 @@ export const generalQueryDefs = {
     byId: `
       SELECT
         tenant_customer_id AS customer_id, tenant_id,
-        first_name, last_name,
+        first_name, last_name, business_name,
         identification_type_id AS identification_type,
         document_number,
         econ_activity, email, phone, birthdate, address,
@@ -160,6 +162,7 @@ export const generalQueryDefs = {
         tc.tenant_id,
         tc.first_name,
         tc.last_name,
+        tc.business_name,
         tc.document_number,
         tc.email,
         tc.phone,
@@ -182,21 +185,23 @@ export const generalQueryDefs = {
     `,
     create: `
       INSERT INTO general_schema.tenant_customer
-        (tenant_id, first_name, last_name, identification_type_id, document_number, econ_activity, email, phone, birthdate, address, created_at, updated_at, is_tenant, customer_segment_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW(), $11, $12)
+        (tenant_id, first_name, last_name, identification_type_id, document_number, econ_activity, email, phone, birthdate, address, created_at, updated_at, is_tenant, customer_segment_id, business_name)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW(), $11, $12, $13)
       RETURNING
         tenant_customer_id AS customer_id, tenant_id,
-        first_name, last_name,
+        first_name, last_name, business_name,
         identification_type_id AS identification_type,
         document_number,
         econ_activity, email, phone, birthdate, address,
         customer_segment_id AS segment_id,
         is_tenant, created_at, updated_at
     `,
+    identificationCode:
+      'SELECT ident_code FROM general_schema.identification_type WHERE identification_type_id = $1',
     byEmail: `
       SELECT
         tenant_customer_id AS customer_id, tenant_id,
-        first_name, last_name,
+        first_name, last_name, business_name,
         identification_type_id AS identification_type,
         document_number,
         econ_activity, email, phone, birthdate, address,
@@ -215,6 +220,7 @@ export const generalQueryDefs = {
         tc.tenant_id,
         tc.first_name,
         tc.last_name,
+        tc.business_name,
         tc.identification_type_id AS identification_type,
         tc.document_number,
         tc.econ_activity,

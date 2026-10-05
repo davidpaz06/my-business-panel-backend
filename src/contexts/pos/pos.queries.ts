@@ -7,6 +7,25 @@ export const posQueryDefs = {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING sale_id
     `,
+    // Datos del cliente que exige la factura. El tenant se resuelve desde la
+    // sucursal de la venta para validar que el cliente pertenece al mismo tenant.
+    getCustomerForInvoice: `
+      SELECT
+        tc.tenant_customer_id,
+        tc.first_name,
+        tc.last_name,
+        tc.business_name,
+        tc.document_number,
+        tc.address,
+        it.ident_code AS identification_type_code
+      FROM general_schema.tenant_customer tc
+      LEFT JOIN general_schema.identification_type it
+        ON it.identification_type_id = tc.identification_type_id
+      WHERE tc.tenant_customer_id = $1
+        AND tc.tenant_id = (
+          SELECT b.tenant_id FROM general_schema.branch b WHERE b.branch_id = $2
+        )
+    `,
     linkSaleToActiveSession: `
       INSERT INTO pos_schema.cash_register_sale (
         cash_register_session_id,
@@ -132,6 +151,9 @@ export const posQueryDefs = {
     getInvoiceBySaleId: `
       SELECT
         i.invoice_id,
+        -- Correlativo interno por tenant con 8 digitos (00055703). NULL en
+        -- facturas anteriores a la migracion 040: LPAD(NULL) sigue siendo NULL.
+        LPAD(i.invoice_number::text, 8, '0') AS invoice_number,
         i.subtotal_amount,
         i.tax_amount,
         i.total_amount,
@@ -148,6 +170,7 @@ export const posQueryDefs = {
         i.invoiced_at,
         tc.first_name,
         tc.last_name,
+        tc.business_name,
         tc.document_number,
         tc.email,
         tc.econ_activity AS customer_econ_activity,

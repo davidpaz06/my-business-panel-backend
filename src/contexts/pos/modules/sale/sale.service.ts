@@ -17,6 +17,7 @@ import { InvoiceService } from '../invoice/invoice.service';
 import { AccountingJournalService } from '../../../finances/modules/accounting/accounting-journal.service';
 import { SaleItemService } from '../sale-item/sale-item.service';
 import { WarehouseService } from '@/contexts/inventory/modules/warehouse/warehouse.service';
+import { missingInvoiceFields } from '@/contexts/general/modules/customer/customer-invoice-requirements';
 
 const { sales, loyaltyScore } = posQueries;
 
@@ -33,7 +34,41 @@ export class SaleService {
     private readonly journalService: AccountingJournalService,
   ) {}
 
+  /**
+   * La factura exige los datos del comprador: el cliente debe existir en el
+   * tenant de la sucursal y tener documento, nombre (o razon social si es
+   * J/G/C) y direccion. Se valida antes de abrir cualquier transaccion para
+   * devolver un mensaje accionable en lugar de un error de trigger.
+   */
+  private async assertCustomerCanBeInvoiced(
+    tenantCustomerId: string,
+    branchId: string,
+  ) {
+    const { rows } = await this.db.query(sales.getCustomerForInvoice, [
+      tenantCustomerId,
+      branchId,
+    ]);
+    const customer = rows[0];
+    if (!customer) {
+      throw new BadRequestException(
+        'El cliente no existe o no pertenece a este negocio.',
+      );
+    }
+
+    const missing = missingInvoiceFields(customer);
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Complete los datos del cliente para facturar. Falta: ${missing.join(', ')}.`,
+      );
+    }
+  }
+
   async createSale(data: NewSingleSaleDto) {
+    await this.assertCustomerCanBeInvoiced(
+      data.tenant_customer_id,
+      data.branch_id,
+    );
+
     const params = [
         data.branch_id,
         data.tenant_customer_id,
@@ -66,14 +101,10 @@ export class SaleService {
   async createFullSale(data: FullSaleDto) {
     const { items, payments } = data;
 
-    const hasPointsPayment = (payments ?? []).some(
-      (p) => p.is_points_redemption,
+    await this.assertCustomerCanBeInvoiced(
+      data.tenant_customer_id,
+      data.branch_id,
     );
-    if (hasPointsPayment && !data.tenant_customer_id) {
-      throw new BadRequestException(
-        'Se requiere asociar un cliente para realizar pagos con puntos de fidelidad.',
-      );
-    }
 
     if (data.sale_condition === '02' && !data.due_date) {
       throw new BadRequestException(

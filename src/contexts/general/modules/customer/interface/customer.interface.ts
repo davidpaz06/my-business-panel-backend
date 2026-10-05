@@ -3,6 +3,8 @@ export interface Customer {
   tenant_id: string;
   first_name: string;
   last_name: string;
+  business_name?: string | null;
+  identification_type?: number | null;
   document_type_id: number;
   document_number: string;
   econ_activity: string;

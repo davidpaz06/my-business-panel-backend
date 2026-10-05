@@ -1,5 +1,6 @@
 export interface Invoice {
-  tenant_customer_id: string | null;
+  // Obligatorio desde la migracion 040 (trg_invoice_require_customer).
+  tenant_customer_id: string;
   currency_id: number;
   subtotal_amount: number;
   tax_amount: number;
@@ -43,6 +44,8 @@ export interface FullInvoicePayment {
 
 export interface FullInvoice {
   invoice_id: string;
+  /** Correlativo de 8 digitos por tenant. null en facturas anteriores a la migracion 040. */
+  invoice_number: string | null;
   subtotal_amount: number;
   tax_amount: number;
   total_amount: number;
@@ -56,6 +59,7 @@ export interface FullInvoice {
   invoiced_at: Date | string;
   first_name: string | null;
   last_name: string | null;
+  business_name: string | null;
   document_number: string | null;
   email: string | null;
   customer_econ_activity: string | null;

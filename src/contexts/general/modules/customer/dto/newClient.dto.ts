@@ -47,9 +47,16 @@ export class NewClientDto {
   @IsOptional()
   birthdate?: Date;
 
+  // Obligatoria: la factura imprime el domicilio del comprador.
+  @IsNotEmpty({ message: 'La direccion del cliente es obligatoria' })
+  @IsString()
+  address!: string;
+
+  // Razon social: obligatoria cuando el tipo de documento es J/G/C (se valida
+  // en CustomerService porque depende del codigo del tipo de documento).
   @IsOptional()
   @IsString()
-  address?: string;
+  business_name?: string;
 
   @IsOptional()
   @IsNumber()
