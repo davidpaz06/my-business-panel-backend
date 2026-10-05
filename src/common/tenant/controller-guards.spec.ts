@@ -36,7 +36,6 @@ const NOT_YET_AUDITED = [
 const POS_PENDING_PHASE = [
   'contexts/pos/modules/loyal-program/loyalty-program.controller.ts',
   'contexts/pos/modules/returns/returns.controller.ts',
-  'contexts/pos/modules/sale-item/sale-item.controller.ts',
 ];
 
 const SRC = join(__dirname, '..', '..');

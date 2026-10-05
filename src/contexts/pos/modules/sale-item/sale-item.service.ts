@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import { FullItem, Item, ItemFromDb } from './interface/sale-item.interface';
@@ -10,18 +10,35 @@ const { saleItems } = posQueries;
 export class SaleItemService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
-  async getAllItems(sale_id: string): Promise<ItemFromDb[]> {
-    const items = await this.db.query(saleItems.getItems, [sale_id]);
+  // scopeTenantId: tenant de la sesion; null solo para el superusuario de
+  // plataforma. Una linea de otro tenant responde como si no existiera.
+  async getAllItems(
+    sale_id: string,
+    scopeTenantId: string | null,
+  ): Promise<ItemFromDb[]> {
+    const items = await this.db.query(saleItems.getItems, [
+      sale_id,
+      scopeTenantId,
+    ]);
     return items.rows;
   }
 
-  async getItemById(id: string): Promise<FullItem | null> {
-    const item = await this.db.query(saleItems.getItemById, [id]);
-    return item.rows[0] || null;
+  async getItemById(
+    id: string,
+    scopeTenantId: string | null,
+  ): Promise<FullItem> {
+    const item = await this.db.query(saleItems.getItemById, [
+      id,
+      scopeTenantId,
+    ]);
+    if (item.rows.length === 0) throw new NotFoundException('Item not found');
+    return item.rows[0];
   }
 
-  async deleteItem(id: string) {
-    await this.db.query(saleItems.delete, [id]);
+  async deleteItem(id: string, scopeTenantId: string | null) {
+    const deleted = await this.db.query(saleItems.delete, [id, scopeTenantId]);
+    if (deleted.rows.length === 0)
+      throw new NotFoundException('Item not found');
     return { message: `Deleted item with id ${id}` };
   }
 

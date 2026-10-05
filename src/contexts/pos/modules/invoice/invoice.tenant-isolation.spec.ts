@@ -22,6 +22,7 @@ const session = (role_id: number): IUserSession => ({
   role_id,
 });
 
+/* eslint-disable @typescript-eslint/unbound-method */
 describe('Invoice - aislamiento por tenant', () => {
   const query = jest.fn();
   const toSql = (q: any): string => (typeof q === 'string' ? q : q.sql);

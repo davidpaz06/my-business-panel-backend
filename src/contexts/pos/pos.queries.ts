@@ -82,10 +82,18 @@ export const posQueryDefs = {
         ON pv.tenant_id = si.tenant_id AND pv.product_variant_id = si.product_variant_id
       LEFT JOIN pos_schema.promotion p ON p.promotion_id = si.promotion_id
       WHERE si.sale_id = $1
+        AND ($2::uuid IS NULL OR si.tenant_id = $2)
     `,
-    getItemById: 'SELECT * FROM pos_schema.sale_item WHERE sale_item_id = $1',
-    delete:
-      'DELETE FROM pos_schema.sale_item WHERE sale_item_id = $1 RETURNING sale_item_id',
+    // $2 = tenant de alcance (null = superusuario de plataforma).
+    getItemById: `
+      SELECT * FROM pos_schema.sale_item
+      WHERE sale_item_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)
+    `,
+    delete: `
+      DELETE FROM pos_schema.sale_item
+      WHERE sale_item_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)
+      RETURNING sale_item_id
+    `,
   },
 
   invoice: {
