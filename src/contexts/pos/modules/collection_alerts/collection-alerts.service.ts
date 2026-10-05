@@ -6,18 +6,16 @@ import {
 } from '@nestjs/common';
 import Database from '@crane-technologies/database/dist/components/Database';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import { StateService } from '@/contexts/general/modules/state/state.service';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { collectionAlertQueries } from './collection-alerts.queries';
 import { UpsertCollectionAlertConfigDto } from './dto/upsert-collection-alert-config.dto';
-
-const SUPERUSER_HIERARCHY = 1;
 
 @Injectable()
 export class CollectionAlertsService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
-    private readonly stateService: StateService,
+    private readonly tenantScope: TenantScopeService,
   ) {}
 
   async getPendingAlerts(session: IUserSession, tenantId?: string) {
@@ -120,7 +118,7 @@ export class CollectionAlertsService {
     if (!tenantId || tenantId === session.tenant_id) {
       return session.tenant_id;
     }
-    if (!this.isSuperuser(session.role_id)) {
+    if (!this.tenantScope.isSuperuser(session)) {
       throw new ForbiddenException(
         'No tienes permisos para consultar alertas de otro tenant',
       );
@@ -129,7 +127,7 @@ export class CollectionAlertsService {
   }
 
   private assertTenantAccess(resourceTenantId: string, session: IUserSession) {
-    if (this.isSuperuser(session.role_id)) {
+    if (this.tenantScope.isSuperuser(session)) {
       return;
     }
     if (resourceTenantId !== session.tenant_id) {
@@ -137,11 +135,5 @@ export class CollectionAlertsService {
         'No tienes permisos para acceder a esta alerta',
       );
     }
-  }
-
-  private isSuperuser(roleId: number) {
-    return (
-      this.stateService.getRole(roleId).role_hierarchy === SUPERUSER_HIERARCHY
-    );
   }
 }

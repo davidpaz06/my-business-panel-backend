@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import Database from '@crane-technologies/database/dist/components/Database';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import { StateService } from '@/contexts/general/modules/state/state.service';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import { WarehouseService } from '@/contexts/inventory/modules/warehouse/warehouse.service';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { accountsReceivableQueries } from './accounts-receivable.queries';
@@ -18,7 +18,6 @@ import { posQueries } from '@pos/pos.queries';
 
 const { ar, collections, catalog, apartado } = accountsReceivableQueries;
 const { loyaltyScore } = posQueries;
-const SUPERUSER_HIERARCHY = 1;
 
 @Injectable()
 export class AccountsReceivableService {
@@ -26,7 +25,7 @@ export class AccountsReceivableService {
 
   constructor(
     @Inject(DATABASE) private readonly db: Database,
-    private readonly stateService: StateService,
+    private readonly tenantScope: TenantScopeService,
     private readonly warehouseService: WarehouseService,
   ) {}
 
@@ -35,7 +34,7 @@ export class AccountsReceivableService {
     const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 50;
     const offset = (safePage - 1) * safeLimit;
 
-    const result = this.isSuperuser(session.role_id)
+    const result = this.tenantScope.isSuperuser(session)
       ? await this.db.query(ar.getAllGlobal, [safeLimit, offset])
       : await this.db.query(ar.getAllByTenant, [
           session.tenant_id,
@@ -323,7 +322,7 @@ export class AccountsReceivableService {
   }
 
   private assertTenantAccess(resourceTenantId: string, session: IUserSession) {
-    if (this.isSuperuser(session.role_id)) {
+    if (this.tenantScope.isSuperuser(session)) {
       return;
     }
     if (resourceTenantId !== session.tenant_id) {
@@ -331,11 +330,5 @@ export class AccountsReceivableService {
         'No tienes permisos para acceder a este recurso',
       );
     }
-  }
-
-  private isSuperuser(roleId: number) {
-    return (
-      this.stateService.getRole(roleId).role_hierarchy === SUPERUSER_HIERARCHY
-    );
   }
 }
