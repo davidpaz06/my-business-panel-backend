@@ -124,15 +124,20 @@ export const posQueryDefs = {
         COALESCE(pv.variant_name, p.product_name, 'Product'),
         si.quantity,
         si.unit_price,
-        si.total_price,
+        amt.item_subtotal,
         COALESCE(tr.rate_percentage, 0),
-        ROUND(si.total_price * COALESCE(tr.rate_percentage, 0) / 100, 2),
-        si.total_price + ROUND(si.total_price * COALESCE(tr.rate_percentage, 0) / 100, 2)
+        amt.item_tax_amount,
+        amt.item_total
       FROM pos_schema.sale_item si
       JOIN general_schema.product_variant pv
         ON si.tenant_id = pv.tenant_id AND si.product_variant_id = pv.product_variant_id
       LEFT JOIN general_schema.product p ON pv.product_id = p.product_id
       LEFT JOIN general_schema.tax_rate tr ON p.tax_rate_id = tr.tax_rate_id
+      -- Desglose segun product_variant.includes_iva (migracion 042): si el
+      -- precio ya incluye IVA se desglosa en vez de sumarlo encima.
+      CROSS JOIN LATERAL pos_schema.invoice_item_amounts(
+        si.total_price, COALESCE(tr.rate_percentage, 0), pv.includes_iva
+      ) amt
       WHERE si.sale_id = $2
     `,
     getBills: `
