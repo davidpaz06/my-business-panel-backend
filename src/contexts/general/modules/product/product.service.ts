@@ -82,8 +82,15 @@ export class ProductService {
     };
   }
 
-  async getProductBySku(sku: string): Promise<Product> {
-    const product = await this.db.query(products.getBySku, [sku]);
+  /** scopeTenantId null = sin filtro (superusuario de plataforma). */
+  async getProductBySku(
+    sku: string,
+    scopeTenantId: string | null,
+  ): Promise<Product> {
+    const product = await this.db.query(products.getBySku, [
+      sku,
+      scopeTenantId,
+    ]);
     return product.rows[0];
   }
 
@@ -295,7 +302,14 @@ export class ProductService {
   }
 
   async updateProduct(data: UpdateProductDto, productId: string) {
-    const { attribute_value_ids, group_ids, ...updates } = data;
+    // tenant_id nunca se reasigna por PATCH: un producto no cambia de empresa
+    const {
+      attribute_value_ids,
+      group_ids,
+      tenant_id: _ignoredTenantId,
+      ...updates
+    } = data;
+    void _ignoredTenantId;
 
     const updateKeys = Object.keys(updates).filter(
       (key) => updates[key as keyof typeof updates] !== undefined,

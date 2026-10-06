@@ -1,4 +1,6 @@
-import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
+import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
 import { IdentificationTypeService } from './identification-type.service';
 import { Controller, Delete, Get, Param, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -8,8 +10,9 @@ import {
   deleteDocumentTypeDoc,
 } from '@/docs/contexts/general/identification-type';
 
-// @UseGuards(AuthorizationGuard)
+// Catalogo global: lectura con sesion; borrar solo el superusuario de plataforma.
 @ApiTags('Document Type')
+@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
 @Controller('document')
 export class IdentificationTypeController {
   constructor(
@@ -37,6 +40,7 @@ export class IdentificationTypeController {
   @ApiResponse(deleteDocumentTypeDoc.responses[200])
   @ApiResponse(deleteDocumentTypeDoc.responses[401])
   @ApiResponse(deleteDocumentTypeDoc.responses[404])
+  @RequiredRole('superuser')
   @Delete(':id')
   delete(@Param('id') id: string) {
     return this.documentTypeService.delete(id);

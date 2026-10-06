@@ -22,7 +22,8 @@ interface AccountListQuery {
   branch_id?: string;
 }
 
-const SUPERUSER_HIERARCHY = 1;
+// role_hierarchy 1 es employee; el superusuario se identifica por nombre de rol
+const SUPERUSER_ROLE_NAME = 'superuser';
 
 export interface AlertConfig {
   warning_days_before_due: number;
@@ -50,8 +51,8 @@ export class AccountsService {
 
   async getAccountsOverview(session: IUserSession, branchId?: string) {
     const isSuperuser =
-      this.stateService.getRole(session.role_id).role_hierarchy ===
-      SUPERUSER_HIERARCHY;
+      this.stateService.getRole(session.role_id).role_name ===
+      SUPERUSER_ROLE_NAME;
 
     const { alertConfig } = accountsOverviewQueries;
     const branch = branchId || null;
@@ -122,8 +123,8 @@ export class AccountsService {
 
   async getPayablesList(query: AccountListQuery, session: IUserSession) {
     const isSuperuser =
-      this.stateService.getRole(session.role_id).role_hierarchy ===
-      SUPERUSER_HIERARCHY;
+      this.stateService.getRole(session.role_id).role_name ===
+      SUPERUSER_ROLE_NAME;
 
     const values: unknown[] = [];
     const conditions: string[] = ['ap.is_paid = false'];
@@ -159,8 +160,8 @@ export class AccountsService {
 
   async getReceivablesList(query: AccountListQuery, session: IUserSession) {
     const isSuperuser =
-      this.stateService.getRole(session.role_id).role_hierarchy ===
-      SUPERUSER_HIERARCHY;
+      this.stateService.getRole(session.role_id).role_name ===
+      SUPERUSER_ROLE_NAME;
 
     const values: unknown[] = [];
     const conditions: string[] = ['ar.is_paid = false'];
@@ -197,8 +198,8 @@ export class AccountsService {
 
   async getPayablePayments(payableId: string, session: IUserSession) {
     const isSuperuser =
-      this.stateService.getRole(session.role_id).role_hierarchy ===
-      SUPERUSER_HIERARCHY;
+      this.stateService.getRole(session.role_id).role_name ===
+      SUPERUSER_ROLE_NAME;
 
     const { payableDetail } = accountsOverviewQueries;
 
@@ -220,8 +221,8 @@ export class AccountsService {
 
   async getReceivableCollections(receivableId: string, session: IUserSession) {
     const isSuperuser =
-      this.stateService.getRole(session.role_id).role_hierarchy ===
-      SUPERUSER_HIERARCHY;
+      this.stateService.getRole(session.role_id).role_name ===
+      SUPERUSER_ROLE_NAME;
 
     const { receivableDetail } = accountsOverviewQueries;
 

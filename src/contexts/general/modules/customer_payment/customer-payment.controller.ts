@@ -1,5 +1,7 @@
-import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
-import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import {
   Body,
   Controller,
@@ -20,18 +22,25 @@ import {
   deleteCustomerPaymentDoc,
 } from '@/docs/contexts/general/customer_payment';
 
-// ? @UseGuards(AuthorizationGuard)
+// Aislamiento por tenant: los pagos se listan y operan solo dentro del tenant
+// de la sesion; ventas, clientes y pagos ajenos responden 404.
 @ApiTags('Customer Payment')
+@UseGuards(AuthenticationGuard)
 @Controller('payment')
 export class CustomerPaymentController {
-  constructor(private readonly paymentsService: CustomerPaymentService) {}
+  constructor(
+    private readonly paymentsService: CustomerPaymentService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   @ApiOperation(getAllPaymentsDoc.operation)
   @ApiResponse(getAllPaymentsDoc.responses[200])
   @ApiResponse(getAllPaymentsDoc.responses[401])
   @Get()
-  async getAllPayments() {
-    return this.paymentsService.getEveryPayment();
+  async getAllPayments(@Session() session: IUserSession) {
+    return this.paymentsService.getEveryPayment(
+      this.tenantScope.scopeFor(session),
+    );
   }
 
   @ApiOperation(getCustomerPaymentsDoc.operation)
@@ -39,7 +48,11 @@ export class CustomerPaymentController {
   @ApiResponse(getCustomerPaymentsDoc.responses[401])
   @ApiResponse(getCustomerPaymentsDoc.responses[404])
   @Get(':id')
-  async getCustomerPayments(@Param('id') id: string) {
+  async getCustomerPayments(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+  ) {
+    await this.tenantScope.assertOwns('customer', id, session);
     return this.paymentsService.getCustomerPayments(id);
   }
 
@@ -48,7 +61,20 @@ export class CustomerPaymentController {
   @ApiResponse(newPaymentDoc.responses[400])
   @ApiResponse(newPaymentDoc.responses[401])
   @Post()
-  async newPayment(@Body() req: NewCustomerPaymentDto) {
+  async newPayment(
+    @Session() session: IUserSession,
+    @Body() req: NewCustomerPaymentDto,
+  ) {
+    if (req.sale_id) {
+      await this.tenantScope.assertOwns('sale', req.sale_id, session);
+    }
+    if (req.tenant_customer_id) {
+      await this.tenantScope.assertOwns(
+        'customer',
+        req.tenant_customer_id,
+        session,
+      );
+    }
     return this.paymentsService.createCustomerPayment(req);
   }
 
@@ -57,7 +83,17 @@ export class CustomerPaymentController {
   @ApiResponse(bulkInsertPaymentsDoc.responses[400])
   @ApiResponse(bulkInsertPaymentsDoc.responses[401])
   @Post('bulk')
-  async bulkInsert(@Body() req: testdto) {
+  async bulkInsert(@Session() session: IUserSession, @Body() req: testdto) {
+    await this.tenantScope.assertOwns('sale', req.sale_id, session);
+    for (const payment of req.payments ?? []) {
+      if (payment.tenant_customer_id) {
+        await this.tenantScope.assertOwns(
+          'customer',
+          payment.tenant_customer_id,
+          session,
+        );
+      }
+    }
     return this.paymentsService.bulkInsert(req.payments, req.sale_id);
   }
 
@@ -66,7 +102,11 @@ export class CustomerPaymentController {
   @ApiResponse(deleteCustomerPaymentDoc.responses[401])
   @ApiResponse(deleteCustomerPaymentDoc.responses[404])
   @Delete(':id')
-  async deleteCustomerPayment(@Param('id') id: string) {
+  async deleteCustomerPayment(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+  ) {
+    await this.tenantScope.assertOwns('customerPayment', id, session);
     return this.paymentsService.deleteCustomerPayment(id);
   }
 }

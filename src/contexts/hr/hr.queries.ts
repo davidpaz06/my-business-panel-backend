@@ -698,8 +698,10 @@ export const hrQueryDefs = {
       SELECT * FROM hr_schema.foul WHERE employee_id = $1
     `,
     getByPeriod: `
-      SELECT * FROM hr_schema.foul
-      WHERE foul_date >= $1 AND foul_date <= $2 
+      SELECT f.* FROM hr_schema.foul f
+      INNER JOIN general_schema.branch b ON b.branch_id = f.branch_id
+      WHERE f.foul_date >= $1 AND f.foul_date <= $2
+        AND ($3::uuid IS NULL OR b.tenant_id = $3)
     `,
     cleanOldFouls: `
       DELETE FROM hr_schema.foul

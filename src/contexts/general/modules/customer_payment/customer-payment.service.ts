@@ -11,8 +11,11 @@ const { customerPayment } = generalQueries;
 export class CustomerPaymentService {
   constructor(@Inject(DATABASE) private readonly db: Database) {}
 
-  async getEveryPayment() {
-    const payments = await this.db.query(customerPayment.getPayments);
+  /** scopeTenantId null = sin filtro (superusuario de plataforma). */
+  async getEveryPayment(scopeTenantId: string | null) {
+    const payments = await this.db.query(customerPayment.getPayments, [
+      scopeTenantId,
+    ]);
     return payments.rows;
   }
 

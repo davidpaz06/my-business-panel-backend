@@ -21,19 +21,30 @@ import {
   updateSuspentionDoc,
 } from '@/docs/contexts/hr/suspention';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 @ApiTags('Suspention')
 @Controller('suspention')
 @UseGuards(AuthenticationGuard)
 export class SuspentionController {
-  constructor(private readonly suspentionService: SuspentionService) {}
+  constructor(
+    private readonly suspentionService: SuspentionService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   @ApiOperation(registerNewSuspentionDoc.operation)
   @ApiResponse(registerNewSuspentionDoc.responses[201])
   @ApiResponse(registerNewSuspentionDoc.responses[400])
   @ApiResponse(registerNewSuspentionDoc.responses[401])
   @Post()
-  async registerNewSuspention(@Body() body: NewSuspentionDto) {
+  async registerNewSuspention(
+    @Session() session: IUserSession,
+    @Body() body: NewSuspentionDto,
+  ) {
+    await this.tenantScope.assertOwns('employee', body.employee_id, session);
+    await this.tenantScope.assertOwns('branch', body.branchId, session);
     return this.suspentionService.registerNewSuspention(body);
   }
 
@@ -41,7 +52,11 @@ export class SuspentionController {
   @ApiResponse(getSuspentionByEmployeeDoc.responses[200])
   @ApiResponse(getSuspentionByEmployeeDoc.responses[401])
   @Get('employee/:employeeId')
-  async getSuspentionByEmployee(@Param('employeeId') id: string) {
+  async getSuspentionByEmployee(
+    @Session() session: IUserSession,
+    @Param('employeeId') id: string,
+  ) {
+    await this.tenantScope.assertOwns('employee', id, session);
     return this.suspentionService.getSuspentionsByEmployee(id);
   }
 
@@ -49,7 +64,11 @@ export class SuspentionController {
   @ApiResponse(getSuspentionsByBranchDoc.responses[200])
   @ApiResponse(getSuspentionsByBranchDoc.responses[401])
   @Get('branch/:branchId')
-  async getSuspentionsByBranch(@Param('branchId') id: string) {
+  async getSuspentionsByBranch(
+    @Session() session: IUserSession,
+    @Param('branchId') id: string,
+  ) {
+    await this.tenantScope.assertOwns('branch', id, session);
     return this.suspentionService.getSuspentionsByBranch(id);
   }
 
@@ -57,7 +76,11 @@ export class SuspentionController {
   @ApiResponse(closeSuspentionDoc.responses[200])
   @ApiResponse(closeSuspentionDoc.responses[401])
   @Patch(':suspentionId/close')
-  async closeSuspention(@Param('suspentionId') id: string) {
+  async closeSuspention(
+    @Session() session: IUserSession,
+    @Param('suspentionId') id: string,
+  ) {
+    await this.tenantScope.assertOwns('suspention', id, session);
     return this.suspentionService.closeSuspention(id);
   }
 
@@ -66,9 +89,15 @@ export class SuspentionController {
   @ApiResponse(updateSuspentionDoc.responses[401])
   @Patch(':suspentionId')
   async updateSuspention(
+    @Session() session: IUserSession,
     @Param('suspentionId') id: string,
     @Body() body: UpdateSuspention,
   ) {
+    await this.tenantScope.assertOwns('suspention', id, session);
+    if (body.employee_id)
+      await this.tenantScope.assertOwns('employee', body.employee_id, session);
+    if (body.branchId)
+      await this.tenantScope.assertOwns('branch', body.branchId, session);
     return this.suspentionService.updateSuspention(id, body);
   }
 }

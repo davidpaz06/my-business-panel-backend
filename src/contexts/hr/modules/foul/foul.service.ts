@@ -86,9 +86,18 @@ export class FoulService {
     }
   }
 
-  async getFoulsByPeriod(startDate: string, endDate: string) {
+  /** scopeTenantId null = sin filtro (superusuario de plataforma). */
+  async getFoulsByPeriod(
+    startDate: string,
+    endDate: string,
+    scopeTenantId: string | null,
+  ) {
     try {
-      const fouls = await this.db.query(foul.getByPeriod, [startDate, endDate]);
+      const fouls = await this.db.query(foul.getByPeriod, [
+        startDate,
+        endDate,
+        scopeTenantId,
+      ]);
 
       return fouls.rows;
     } catch (error) {

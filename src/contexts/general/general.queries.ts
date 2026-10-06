@@ -534,7 +534,7 @@ export const generalQueryDefs = {
         WHERE pvc.tenant_id = pv.tenant_id
           AND pvc.parent_product_variant_id = pv.product_variant_id
       ) comp ON TRUE
-      WHERE pv.sku = $1
+      WHERE pv.sku = $1 AND ($2::uuid IS NULL OR pv.tenant_id = $2)
       `,
     searchByTenant: `
       SELECT pv.product_variant_id, pv.sku, pv.variant_name, pv.product_id,
@@ -1110,10 +1110,15 @@ export const generalQueryDefs = {
 
   customerPayment: {
     getPayments: `
-    SELECT cp.payment_amount, pm.name, cp.payment_date, cp.verified, tc.first_name, tc.last_name, c.symbol FROM pos_schema.customer_payment cp
-    INNER JOIN general_schema.tenant_customer tc USING(tenant_customer_id)
-    INNER JOIN general_schema.payment_method pm USING(payments_method_id)
-    INNER JOIN general_schema.currency c USING(currency_id)
+    SELECT cp.customer_payment_id, cp.payment_amount, pm.name, cp.payment_date, cp.verified, tc.first_name, tc.last_name, c.currency_code
+    FROM pos_schema.customer_payment cp
+    INNER JOIN pos_schema.sale s ON s.sale_id = cp.sale_id
+    INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
+    LEFT JOIN general_schema.tenant_customer tc ON tc.tenant_customer_id = cp.tenant_customer_id
+    LEFT JOIN general_schema.payment_method pm ON pm.payment_method_id = cp.payment_method_id
+    LEFT JOIN general_schema.currency c ON c.currency_id = cp.currency_id
+    WHERE ($1::uuid IS NULL OR b.tenant_id = $1)
+    ORDER BY cp.payment_date DESC
     `,
     getCustomerPayments: `
     SELECT cp.payment_amount, pm.name, cp.payment_date, cp.verified, tc.first_name, tc.last_name, c.currency_code FROM pos_schema.customer_payment cp

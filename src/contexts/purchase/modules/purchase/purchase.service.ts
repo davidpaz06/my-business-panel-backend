@@ -31,7 +31,8 @@ const {
   goodsReceipt,
   disputes,
 } = purchaseQueries;
-const SUPERUSER_HIERARCHY = 1;
+// role_hierarchy 1 es employee; el superusuario se identifica por nombre de rol
+const SUPERUSER_ROLE_NAME = 'superuser';
 const INVOICE_EDITABLE_ORDER_STATUS_ID = 2; // Shipped / "enviada"
 const SHIPPED_STATUS_ID = 2;
 const DELIVERED_STATUS_ID = 3;
@@ -907,8 +908,6 @@ export class PurchaseService {
   }
 
   private isSuperuser(roleId: number) {
-    return (
-      this.stateService.getRole(roleId).role_hierarchy === SUPERUSER_HIERARCHY
-    );
+    return this.stateService.getRole(roleId).role_name === SUPERUSER_ROLE_NAME;
   }
 }

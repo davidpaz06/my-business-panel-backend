@@ -453,8 +453,23 @@ export class TenantService {
   async updateTenant(tenantId: string, tenantData: UpdateTenantDto) {
     const { ...updates } = tenantData;
 
+    // solo columnas propias del tenant (excluye los datos anidados del
+    // onboarding); el DTO usa economic_activity y la columna es econ_activity
+    const UPDATABLE_COLUMNS: Record<string, string> = {
+      tenant_name: 'tenant_name',
+      contact_email: 'contact_email',
+      contact_phone: 'contact_phone',
+      is_subscribed: 'is_subscribed',
+      region_id: 'region_id',
+      identification_type_id: 'identification_type_id',
+      identification: 'identification',
+      economic_activity: 'econ_activity',
+      sign: 'sign',
+    };
     const updateKeys = Object.keys(updates).filter(
-      (key) => updates[key as keyof typeof updates] !== undefined,
+      (key) =>
+        key in UPDATABLE_COLUMNS &&
+        updates[key as keyof typeof updates] !== undefined,
     );
 
     if (updateKeys.length === 0) {
@@ -467,7 +482,7 @@ export class TenantService {
 
     for (const key of updateKeys) {
       const validKey = key as keyof typeof updates;
-      setClause.push(`${key} = $${index}`);
+      setClause.push(`${UPDATABLE_COLUMNS[key]} = $${index}`);
       paramsArray.push(updates[validKey]);
       index++;
     }

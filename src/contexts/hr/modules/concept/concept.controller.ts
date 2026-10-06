@@ -23,24 +23,32 @@ import {
   deleteConceptDoc,
   provisionConceptsDoc,
 } from '@/docs/contexts/hr/concept';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 @ApiTags('Concept')
+@UseGuards(AuthenticationGuard)
 @Controller('concept')
 export class ConceptController {
-  constructor(private readonly conceptService: ConceptService) {}
+  constructor(
+    private readonly conceptService: ConceptService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   @ApiOperation(getConceptsByTenantDoc.operation)
   @ApiResponse(getConceptsByTenantDoc.responses[200])
   @ApiResponse(getConceptsByTenantDoc.responses[401])
   @Get(':tenantId')
-  async getConceptsByTenant(@Param('tenantId') tenantId: string) {
+  async getConceptsByTenant(
+    @Session() session: IUserSession,
+    @Param('tenantId') tenantId: string,
+  ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.conceptService.getAllConceptsByTenant(tenantId);
   }
 
   @ApiOperation(provisionConceptsDoc.operation)
   @ApiResponse(provisionConceptsDoc.responses[201])
   @ApiResponse(provisionConceptsDoc.responses[401])
-  @UseGuards(AuthenticationGuard)
   @Post('provision')
   async provisionDefaults(@Session() user: IUserSession) {
     return this.conceptService.provisionDefaults(user.tenant_id);
@@ -51,7 +59,14 @@ export class ConceptController {
   @ApiResponse(createConceptDoc.responses[400])
   @ApiResponse(createConceptDoc.responses[401])
   @Post()
-  async createConcept(@Body() body: NewConceptDto) {
+  async createConcept(
+    @Session() session: IUserSession,
+    @Body() body: NewConceptDto,
+  ) {
+    body.tenantId = this.tenantScope.resolveRequestedTenant(
+      session,
+      body.tenantId,
+    );
     return this.conceptService.createNewConcept(body);
   }
 
@@ -62,9 +77,13 @@ export class ConceptController {
   @ApiResponse(updateConceptDoc.responses[404])
   @Patch(':conceptId')
   async updateConcept(
+    @Session() session: IUserSession,
     @Param('conceptId') conceptId: number,
     @Body() body: UpdateConceptDto,
   ) {
+    await this.tenantScope.assertOwns('payrollConcept', conceptId, session);
+    // un concepto no cambia de empresa
+    delete body.tenantId;
     return this.conceptService.updateConcept(body, conceptId);
   }
 
@@ -73,12 +92,20 @@ export class ConceptController {
   @ApiResponse(softDeleteConceptDoc.responses[401])
   @ApiResponse(softDeleteConceptDoc.responses[404])
   @Patch(':conceptId/soft-delete')
-  async softDeleteConcept(@Param('conceptId') conceptId: number) {
+  async softDeleteConcept(
+    @Session() session: IUserSession,
+    @Param('conceptId') conceptId: number,
+  ) {
+    await this.tenantScope.assertOwns('payrollConcept', conceptId, session);
     return this.conceptService.softDeleteConcept(conceptId);
   }
 
   @Patch(':conceptId/reactivate')
-  async reactivateConcept(@Param('conceptId') conceptId: number) {
+  async reactivateConcept(
+    @Session() session: IUserSession,
+    @Param('conceptId') conceptId: number,
+  ) {
+    await this.tenantScope.assertOwns('payrollConcept', conceptId, session);
     return this.conceptService.reactivateConcept(conceptId);
   }
 
@@ -87,7 +114,11 @@ export class ConceptController {
   @ApiResponse(deleteConceptDoc.responses[401])
   @ApiResponse(deleteConceptDoc.responses[404])
   @Delete(':conceptId')
-  async deleteConcept(@Param('conceptId') conceptId: number) {
+  async deleteConcept(
+    @Session() session: IUserSession,
+    @Param('conceptId') conceptId: number,
+  ) {
+    await this.tenantScope.assertOwns('payrollConcept', conceptId, session);
     return this.conceptService.deleteConcept(conceptId);
   }
 }

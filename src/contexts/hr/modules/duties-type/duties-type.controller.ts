@@ -17,15 +17,25 @@ import {
   UpdateDutiesTypeDto,
 } from './dto/duties-type.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 @ApiTags('DutiesType')
 @Controller('duties-type')
 @UseGuards(AuthenticationGuard)
 export class DutiesTypeController {
-  constructor(private readonly dutiesTypeService: DutiesTypeService) {}
+  constructor(
+    private readonly dutiesTypeService: DutiesTypeService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   @Get()
-  async listByTenant(@Query('tenant_id') tenantId: string) {
+  async listByTenant(
+    @Session() session: IUserSession,
+    @Query('tenant_id') tenantId: string,
+  ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.dutiesTypeService.listByTenant(tenantId);
   }
 

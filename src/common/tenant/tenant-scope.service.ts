@@ -51,6 +51,66 @@ const OWNERSHIP_QUERIES = {
     SELECT 1 FROM general_schema.tenant_product_group_type
     WHERE tenant_product_group_type_id = $1 AND tenant_id = $2 LIMIT 1
   `,
+  sale: `
+    SELECT 1 FROM pos_schema.sale s
+    INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
+    WHERE s.sale_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
+  customerPayment: `
+    SELECT 1 FROM pos_schema.customer_payment cp
+    INNER JOIN pos_schema.sale s ON s.sale_id = cp.sale_id
+    INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
+    WHERE cp.customer_payment_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
+  customerSegmentMargin: `
+    SELECT 1 FROM general_schema.customer_segment_margin
+    WHERE customer_segment_margin_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  payrollConcept: `
+    SELECT 1 FROM hr_schema.payroll_concept
+    WHERE concept_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  employee: `
+    SELECT 1 FROM hr_schema.employee
+    WHERE employee_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  contract: `
+    SELECT 1 FROM hr_schema.contract
+    WHERE contract_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  turn: `
+    SELECT 1 FROM hr_schema.turn t
+    INNER JOIN general_schema.branch b ON b.branch_id = t.branch_id
+    WHERE t.turn_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
+  suspention: `
+    SELECT 1 FROM hr_schema.suspention s
+    INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
+    WHERE s.suspention_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
+  incapacity: `
+    SELECT 1 FROM hr_schema.incapacity i
+    INNER JOIN general_schema.branch b ON b.branch_id = i.branch_id
+    WHERE i.incapacity_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
+  clocking: `
+    SELECT 1 FROM hr_schema.clocking c
+    INNER JOIN general_schema.branch b ON b.branch_id = c.branch_id
+    WHERE c.clocking_id = $1 AND b.tenant_id = $2 LIMIT 1
+  `,
+  paysheet: `
+    SELECT 1 FROM hr_schema.paysheet
+    WHERE paysheet_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
+  paysheetDetail: `
+    SELECT 1 FROM hr_schema.paysheet_detail d
+    INNER JOIN hr_schema.paysheet p ON p.paysheet_id = d.paysheet_id
+    WHERE d.detail_id = $1 AND p.tenant_id = $2 LIMIT 1
+  `,
+  productVariant: `
+    SELECT 1 FROM general_schema.product_variant
+    WHERE product_variant_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
   cashRegister: `
     SELECT 1 FROM pos_schema.cash_register cr
     INNER JOIN general_schema.branch b ON b.branch_id = cr.branch_id
@@ -123,7 +183,7 @@ export class TenantScopeService {
   /** 404 si el recurso no existe en el tenant de la sesion. */
   async assertOwns(
     resource: OwnedResource,
-    id: string,
+    id: string | number,
     session: IUserSession,
   ): Promise<void> {
     if (this.isSuperuser(session)) return;
@@ -132,7 +192,7 @@ export class TenantScopeService {
 
   async assertOwnedByTenant(
     resource: OwnedResource,
-    id: string,
+    id: string | number,
     tenantId: string,
   ): Promise<void> {
     const { rows } = await this.db.query(OWNERSHIP_QUERIES[resource], [

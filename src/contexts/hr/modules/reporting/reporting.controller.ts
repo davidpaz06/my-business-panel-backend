@@ -13,12 +13,18 @@ import {
   getTrialBalanceDoc,
 } from '@/docs/contexts/hr/reporting';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 @ApiTags('Reporting')
 @Controller('reporting')
 @UseGuards(AuthenticationGuard)
 export class ReportingController {
-  constructor(private readonly reportingService: ReportingService) {}
+  constructor(
+    private readonly reportingService: ReportingService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   // -------------------------------------------------------
   // 1. PROFITABILITY BY PRODUCT
@@ -29,10 +35,12 @@ export class ReportingController {
   @ApiResponse(getProfitabilityByProductDoc.responses[401])
   @Get('profitability/product/:tenantId')
   getProfitabilityByProduct(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getProfitabilityByProduct(
       tenantId,
       start,
@@ -49,10 +57,12 @@ export class ReportingController {
   @ApiResponse(getProfitabilityBySaleDoc.responses[401])
   @Get('profitability/sale/:tenantId')
   getProfitabilityBySale(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getProfitabilityBySale(tenantId, start, end);
   }
 
@@ -65,10 +75,12 @@ export class ReportingController {
   @ApiResponse(getIncomeStatementDoc.responses[401])
   @Get('income-statement/:tenantId')
   getIncomeStatement(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getIncomeStatement(tenantId, start, end);
   }
 
@@ -81,10 +93,12 @@ export class ReportingController {
   @ApiResponse(getExpenseSummaryByCategoryDoc.responses[401])
   @Get('expenses/by-category/:tenantId')
   getExpenseSummaryByCategory(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getExpenseSummaryByCategory(
       tenantId,
       start,
@@ -97,10 +111,12 @@ export class ReportingController {
   @ApiResponse(getExpenseFixedVsVariableDoc.responses[401])
   @Get('expenses/fixed-vs-variable/:tenantId')
   getExpenseFixedVsVariable(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getExpenseFixedVsVariable(
       tenantId,
       start,
@@ -113,10 +129,12 @@ export class ReportingController {
   @ApiResponse(getExpenseMonthlyTrendDoc.responses[401])
   @Get('expenses/monthly-trend/:tenantId')
   getExpenseMonthlyTrend(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getExpenseMonthlyTrend(tenantId, start, end);
   }
 
@@ -129,10 +147,12 @@ export class ReportingController {
   @ApiResponse(getSalesBySellerDoc.responses[401])
   @Get('sales-by-seller/:tenantId')
   getSalesBySeller(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getSalesBySeller(tenantId, start, end);
   }
 
@@ -145,10 +165,12 @@ export class ReportingController {
   @ApiResponse(getFinancialKpisDoc.responses[401])
   @Get('kpis/:tenantId')
   getFinancialKpis(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getFinancialKpis(tenantId, start, end);
   }
 
@@ -161,10 +183,12 @@ export class ReportingController {
   @ApiResponse(getTrialBalanceDoc.responses[401])
   @Get('trial-balance/:tenantId')
   getTrialBalance(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.reportingService.getTrialBalance(tenantId, start, end);
   }
 }

@@ -15,6 +15,8 @@ import { ProductInsertDto } from './dto/newProduct.dto';
 import { UpdateProductDto } from './dto/updateProduct.dto';
 import { isUUID } from 'class-validator';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
+import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
 import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.guard';
 import { RequiredLevel } from '@/common/decorators/level_metadata.decorator';
 import {
@@ -24,15 +26,23 @@ import {
   updateProductDoc,
   deleteProductDoc,
 } from '@/docs/contexts/general/product';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 @ApiTags('Product')
 @Controller('product')
 @UseGuards(AuthenticationGuard)
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(
+    private readonly productService: ProductService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   // Global list for superusers — declared BEFORE :tenantId to avoid conflict
   @Get('all')
+  @UseGuards(RoleAuthorizationGuard)
+  @RequiredRole('superuser')
   async getAllProductsGlobal(
     @Query('page') page = '1',
     @Query('limit') limit = '100',
@@ -47,12 +57,19 @@ export class ProductController {
   @ApiResponse(getProductBySkuDoc.responses[200])
   @ApiResponse(getProductBySkuDoc.responses[401])
   @Get('sku/:sku')
-  async getProductBySku(@Param('sku') sku: string) {
-    return this.productService.getProductBySku(sku);
+  async getProductBySku(
+    @Session() session: IUserSession,
+    @Param('sku') sku: string,
+  ) {
+    return this.productService.getProductBySku(
+      sku,
+      this.tenantScope.scopeFor(session),
+    );
   }
 
   @Get(':tenantId/search')
   async searchProductsByTenant(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('q') q = '',
     @Query('page') page = '1',
@@ -61,6 +78,7 @@ export class ProductController {
     @Query('attribute_value_ids') attributeValueIds?: string,
     @Query('no_supplier') noSupplier?: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     const groups = groupIds
       ? groupIds
           .split(',')
@@ -87,9 +105,11 @@ export class ProductController {
 
   @Get(':tenantId/:id/with-attributes')
   async getProductByIdWithAttributes(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Param('id') id: string,
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     return this.productService.getProductByIdWithAttributes(id, tenantId);
   }
 
@@ -99,10 +119,12 @@ export class ProductController {
   @ApiResponse(getAllProductsByTenantDoc.responses[401])
   @Get(':tenantId')
   async getAllProductsByTenant(
+    @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
     @Query('page') page = '1',
     @Query('limit') limit = '100',
   ) {
+    tenantId = this.tenantScope.resolveRequestedTenant(session, tenantId);
     if (!tenantId || !isUUID(tenantId)) {
       return this.productService.getAllProductsGlobal(
         parseInt(page),
@@ -123,7 +145,18 @@ export class ProductController {
   @Post()
   @UseGuards(LevelAuthorizationGuard)
   @RequiredLevel(2)
-  async createNewProduct(@Body() req: ProductInsertDto) {
+  async createNewProduct(
+    @Session() session: IUserSession,
+    @Body() req: ProductInsertDto,
+  ) {
+    // cada producto nuevo pertenece al tenant de la sesion (el superusuario
+    // puede crear en otro tenant indicandolo explicitamente)
+    for (const item of req.products ?? []) {
+      item.tenant_id = this.tenantScope.resolveRequestedTenant(
+        session,
+        item.tenant_id,
+      );
+    }
     return this.productService.createProduct(req);
   }
 
@@ -134,7 +167,12 @@ export class ProductController {
   @Patch(':id')
   @UseGuards(LevelAuthorizationGuard)
   @RequiredLevel(2)
-  async updateProduct(@Param('id') id: string, @Body() req: UpdateProductDto) {
+  async updateProduct(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+    @Body() req: UpdateProductDto,
+  ) {
+    await this.tenantScope.assertOwns('productVariant', id, session);
     return this.productService.updateProduct(req, id);
   }
 
@@ -144,7 +182,11 @@ export class ProductController {
   @Delete(':id')
   @UseGuards(LevelAuthorizationGuard)
   @RequiredLevel(2)
-  async deleteProduct(@Param('id') id: string) {
+  async deleteProduct(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+  ) {
+    await this.tenantScope.assertOwns('productVariant', id, session);
     return this.productService.deleteProduct(id);
   }
 }

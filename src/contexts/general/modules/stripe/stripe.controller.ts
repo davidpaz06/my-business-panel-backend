@@ -1,6 +1,8 @@
-import { Controller, Inject } from '@nestjs/common';
+import { Controller, Inject, UseGuards } from '@nestjs/common';
+import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import Stripe from 'stripe';
 
+@UseGuards(AuthenticationGuard)
 @Controller('stripe')
 export class StripeController {
   constructor(@Inject('STRIPE') private readonly stripe: Stripe) {}

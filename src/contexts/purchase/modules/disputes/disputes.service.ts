@@ -13,7 +13,8 @@ import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 
 const { disputes } = purchaseQueries;
-const SUPERUSER_HIERARCHY = 1;
+// role_hierarchy 1 es employee; el superusuario se identifica por nombre de rol
+const SUPERUSER_ROLE_NAME = 'superuser';
 
 @Injectable()
 export class DisputesService {
@@ -106,8 +107,6 @@ export class DisputesService {
   }
 
   private isSuperuser(roleId: number) {
-    return (
-      this.stateService.getRole(roleId).role_hierarchy === SUPERUSER_HIERARCHY
-    );
+    return this.stateService.getRole(roleId).role_name === SUPERUSER_ROLE_NAME;
   }
 }

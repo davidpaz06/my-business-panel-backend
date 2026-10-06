@@ -21,18 +21,28 @@ import {
   closeIncapacityDoc,
 } from '@/docs/contexts/hr/incapacity';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { Session } from '@/common/decorators/session.decorator';
+import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 
 @ApiTags('Incapacity')
 @Controller('incapacity')
 @UseGuards(AuthenticationGuard)
 export class IncapacityController {
-  constructor(private readonly incService: IncapacityService) {}
+  constructor(
+    private readonly incService: IncapacityService,
+    private readonly tenantScope: TenantScopeService,
+  ) {}
 
   @ApiOperation(getIncapacitiesByBranchDoc.operation)
   @ApiResponse(getIncapacitiesByBranchDoc.responses[200])
   @ApiResponse(getIncapacitiesByBranchDoc.responses[401])
   @Get('branch/:branchId')
-  async getIncapacitiesByBranch(@Param('branchId') branchId: string) {
+  async getIncapacitiesByBranch(
+    @Session() session: IUserSession,
+    @Param('branchId') branchId: string,
+  ) {
+    await this.tenantScope.assertOwns('branch', branchId, session);
     return this.incService.getIncapacitiesByBranch(branchId);
   }
 
@@ -40,7 +50,11 @@ export class IncapacityController {
   @ApiResponse(getIncapacitiesByEmployeeDoc.responses[200])
   @ApiResponse(getIncapacitiesByEmployeeDoc.responses[401])
   @Get('employee/:employeeId')
-  async getIncapacitiesByEmployee(@Param('employeeId') employeeId: string) {
+  async getIncapacitiesByEmployee(
+    @Session() session: IUserSession,
+    @Param('employeeId') employeeId: string,
+  ) {
+    await this.tenantScope.assertOwns('employee', employeeId, session);
     return this.incService.getIncapacitiesByEmployee(employeeId);
   }
 
@@ -49,7 +63,12 @@ export class IncapacityController {
   @ApiResponse(registerIncapacityDoc.responses[400])
   @ApiResponse(registerIncapacityDoc.responses[401])
   @Post()
-  async registerIncapacity(@Body() data: RegisterIncapacityDto) {
+  async registerIncapacity(
+    @Session() session: IUserSession,
+    @Body() data: RegisterIncapacityDto,
+  ) {
+    await this.tenantScope.assertOwns('employee', data.employee_id, session);
+    await this.tenantScope.assertOwns('branch', data.branch_id, session);
     return this.incService.registerIncapacity(data);
   }
 
@@ -58,9 +77,15 @@ export class IncapacityController {
   @ApiResponse(updateIncapacityDoc.responses[401])
   @Patch(':id')
   async updateIncapacityRegister(
+    @Session() session: IUserSession,
     @Param('id') id: string,
     @Body() data: UpdateIncapacityDto,
   ) {
+    await this.tenantScope.assertOwns('incapacity', id, session);
+    if (data.employee_id)
+      await this.tenantScope.assertOwns('employee', data.employee_id, session);
+    if (data.branch_id)
+      await this.tenantScope.assertOwns('branch', data.branch_id, session);
     return this.incService.updateIncapacityRegister(id, data);
   }
 
@@ -68,7 +93,11 @@ export class IncapacityController {
   @ApiResponse(closeIncapacityDoc.responses[200])
   @ApiResponse(closeIncapacityDoc.responses[401])
   @Patch(':id/close')
-  async closeIncapacityRegister(@Param('id') id: string) {
+  async closeIncapacityRegister(
+    @Session() session: IUserSession,
+    @Param('id') id: string,
+  ) {
+    await this.tenantScope.assertOwns('incapacity', id, session);
     return this.incService.closeIncapacity(id);
   }
 }
