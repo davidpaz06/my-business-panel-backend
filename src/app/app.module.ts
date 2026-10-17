@@ -17,7 +17,6 @@ import { TenantModule } from '@/contexts/general/modules/tenant/tenant.module';
 import { ProductCategoryModule } from '@/contexts/general/modules/product_category/product-category.module';
 import { CustomerSegmentMarginModule } from '@/contexts/general/modules/customer_segment_margin/customer_segment_margin.module';
 import { StripeModule } from '@/contexts/general/modules/stripe/stripe.module';
-import { QueueModule } from '@/contexts/general/modules/queue/queue.module';
 import { ProductModule } from '@/contexts/general/modules/product/product.module';
 import { GlobalAttributeModule } from '@/contexts/general/modules/global_attribute/global-attribute.module';
 import { TenantAttributeModule } from '@/contexts/general/modules/tenant_attribute/tenant-attribute.module';
@@ -104,7 +103,6 @@ import { IvaModule } from '@/contexts/finances/modules/iva/iva.module';
     IdentificationTypeModule,
     DbModule,
     TenantScopeModule,
-    QueueModule,
     TenantModule,
     ProductCategoryModule,
     CustomerSegmentMarginModule,

@@ -7,6 +7,7 @@ import {
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@crane-technologies/database';
 import Decimal from 'decimal.js';
+import { AccountingJournalService } from '@/contexts/finances/modules/accounting/accounting-journal.service';
 import { posQueries } from '@pos/pos.queries';
 import { purchaseQueries } from '@purchase/purchase.queries';
 import {
@@ -31,7 +32,10 @@ const { supplierCredits, catalog } = purchaseQueries;
  */
 @Injectable()
 export class CreditDebitNoteService {
-  constructor(@Inject(DATABASE) private readonly db: Database) {}
+  constructor(
+    @Inject(DATABASE) private readonly db: Database,
+    private readonly journalService: AccountingJournalService,
+  ) {}
 
   async create(
     tenantId: string,
@@ -106,6 +110,37 @@ export class CreditDebitNoteService {
         .toFixed(2);
     }
 
+    // FNZ-X-04: neto / IVA de la nota y lo que el cliente aun debe, leidos
+    // antes de insertar (el trigger ajusta la CxC al insertar la nota).
+    const { rows: jRows } = await this.db.query(
+      creditDebitNote.getJournalContext,
+      [dto.invoice_id],
+    );
+    const jctx = jRows[0] as
+      | {
+          subtotal_amount: number;
+          total_amount: number;
+          currency_id: number;
+          receivable_balance: number | null;
+        }
+      | undefined;
+    const noteCurrencyId = Number(
+      dto.currency_id ?? jctx?.currency_id ?? 1,
+    );
+    const gross = new Decimal(dto.amount);
+    // El monto de la nota incluye IVA en la misma proporcion que su factura.
+    const net =
+      jctx && jctx.total_amount > 0
+        ? gross.mul(jctx.subtotal_amount).div(jctx.total_amount)
+        : gross;
+    const tax = gross.minus(net);
+    // La CxC solo se compara con la nota si estan en la misma moneda.
+    const receivableCredit =
+      jctx?.receivable_balance != null &&
+      noteCurrencyId === Number(jctx.currency_id)
+        ? Math.min(Number(jctx.receivable_balance), gross.toNumber())
+        : 0;
+
     const txn = await this.db.transaction();
     try {
       const result = await txn.query(creditDebitNote.create, [
@@ -131,6 +166,26 @@ export class CreditDebitNoteService {
           supplierCreditUsdAmount,
         ]);
       }
+
+      // Asiento de la nota: secundario (no tumba la nota).
+      await this.journalService.trySecondary(
+        txn,
+        `nota ${note.note_id}`,
+        () =>
+          this.journalService.generateNoteJournal(
+            {
+              tenantId,
+              noteId: note.note_id,
+              noteType: dto.note_type,
+              currencyId: noteCurrencyId,
+              netAmount: net.toDecimalPlaces(2).toNumber(),
+              taxAmount: tax.toDecimalPlaces(2).toNumber(),
+              receivableCredit,
+              entryDate: new Date(),
+            },
+            txn,
+          ),
+      );
 
       await txn.commit();
       return note;
@@ -182,7 +237,36 @@ export class CreditDebitNoteService {
       throw new BadRequestException('Esta nota ya esta anulada.');
     }
 
-    const result = await this.db.query(creditDebitNote.void, [noteId]);
-    return result.rows[0];
+    const txn = await this.db.transaction();
+    try {
+      const result = await txn.query(creditDebitNote.void, [noteId]);
+      // Anular la nota revierte su asiento (si lo tiene).
+      await this.journalService.trySecondary(
+        txn,
+        `anulacion nota ${noteId}`,
+        async () => {
+          const when = new Date();
+          const desc = `Anulacion de nota - ${noteId}`;
+          // La nota es de credito o de debito: se revierte el asiento que exista.
+          for (const source of ['CREDIT_NOTE', 'DEBIT_NOTE']) {
+            const id = await this.journalService.reverseEntryBySource(
+              tenantId,
+              source,
+              noteId,
+              when,
+              desc,
+              txn,
+            );
+            if (id) return id;
+          }
+          return null;
+        },
+      );
+      await txn.commit();
+      return result.rows[0];
+    } catch (error) {
+      await txn.rollback();
+      throw error;
+    }
   }
 }

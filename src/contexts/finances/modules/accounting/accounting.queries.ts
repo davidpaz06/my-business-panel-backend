@@ -212,6 +212,17 @@ export const accountingQueries = {
   // JOURNAL GENERATION (Phase 2)
   // -------------------------------------------------------
 
+  // Lineas de un asiento ya registrado (ya en VES), para revertirlo.
+  getEntryLinesBySource: `
+    SELECT jel.account_id, jel.debit_amount, jel.credit_amount, jel.description
+    FROM accounting_schema.journal_entry je
+    JOIN accounting_schema.journal_entry_line jel ON jel.entry_id = je.entry_id
+    WHERE je.tenant_id = $1
+      AND je.source_type_id = $2
+      AND je.source_id = $3
+    ORDER BY je.created_at, jel.created_at
+  `,
+
   getAccountByCode: `
     SELECT account_id
     FROM accounting_schema.chart_of_accounts
@@ -226,11 +237,23 @@ export const accountingQueries = {
     LIMIT 1
   `,
 
+  // $9 = moneda del documento de origen, $10 = tasa USD -> VES usada (las
+  // lineas van en VES, ver migrations/accounting/045).
   createJournalEntryRaw: `
     INSERT INTO accounting_schema.journal_entry
-      (tenant_id, source_type_id, source_id, entry_date, description, status_id, total_debit, total_credit)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      (tenant_id, source_type_id, source_id, entry_date, description, status_id, total_debit, total_credit,
+       currency_id, exchange_rate)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING entry_id
+  `,
+
+  tenantHasAccounts: `
+    SELECT 1 FROM accounting_schema.chart_of_accounts WHERE tenant_id = $1 LIMIT 1
+  `,
+
+  // Tasa USD -> VES del tenant en un instante (migracion general/044).
+  exchangeRateAt: `
+    SELECT general_schema.get_exchange_rate_at($1, $2::timestamp) AS rate
   `,
 
   getConfirmedStatusId: `

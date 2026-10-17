@@ -50,7 +50,7 @@ describe('Returns - aislamiento por tenant', () => {
     getRole: (id: number) => roles[id],
   } as any);
   const controller = new ReturnsController(
-    new ReturnsService(db, tenantScope),
+    new ReturnsService(db, tenantScope, {} as any),
     tenantScope,
   );
 

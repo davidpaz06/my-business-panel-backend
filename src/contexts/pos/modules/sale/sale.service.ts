@@ -20,8 +20,9 @@ import { WarehouseService } from '@/contexts/inventory/modules/warehouse/warehou
 import { missingInvoiceFields } from '@/contexts/general/modules/customer/customer-invoice-requirements';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { calculateEarnedPoints } from '../loyal-program/loyalty-currency';
 
-const { sales, loyaltyScore } = posQueries;
+const { sales, loyaltyScore, saleItems } = posQueries;
 
 @Injectable()
 export class SaleService {
@@ -205,6 +206,9 @@ export class SaleService {
     const txn = await this.db.transaction();
     try {
       let saleId: string;
+      // Puntos que la venta otorga al cliente (calculados una sola vez, en la
+      // moneda del programa, y reutilizados para el saldo tras confirmar).
+      let earnedPoints = 0;
       try {
         const { rows } = await txn.query(sales.createSale, [
           data.branch_id,
@@ -328,15 +332,20 @@ export class SaleService {
             [data.tenant_id],
           );
           const lp = lpRows[0];
-          if (
-            lp &&
-            data.total_amount >= Number(lp.minimum_purchase_for_points)
-          ) {
-            pointsAccumulated = Math.floor(
-              loyaltyBaseAmount * Number(lp.points_earned_per_currency_unit),
+          if (lp) {
+            // FNZ-FI-01: el programa se define en USD; la venta se convierte
+            // antes de aplicar la tasa y la compra minima.
+            pointsAccumulated = await calculateEarnedPoints(
+              txn,
+              lp,
+              data.tenant_id,
+              data.currency_id,
+              data.total_amount,
+              loyaltyBaseAmount,
             );
           }
         }
+        earnedPoints = pointsAccumulated;
 
         await this.invoiceService.createInvoice(
           {
@@ -446,8 +455,61 @@ export class SaleService {
           }
         }
 
-        if (!isApartado) {
-          try {
+        // El costo de venta se fija siempre (tambien en apartados) y fuera del
+        // try contable: antes solo se escribia si el asiento salia bien y la
+        // venta quedaba con costo NULL (margen 100% en Rentabilidad).
+        const { rows: costRows } = await txn.query(saleItems.fixCostAtSale, [
+          saleId,
+        ]);
+        const totalCost = (
+          costRows as Array<{ quantity: number; cost_price_at_sale: string }>
+        ).reduce(
+          (sum, r) => sum + Number(r.cost_price_at_sale) * Number(r.quantity),
+          0,
+        );
+
+        // Contabilidad: secundaria (no debe tumbar la venta) pero en un
+        // savepoint, para que un error SQL del asiento no aborte la
+        // transaccion de la venta (FNZ-X-04).
+        const saleDate = new Date(data.sale_date);
+        await this.journalService.trySecondary(
+          txn,
+          `venta ${saleId}`,
+          async () => {
+            // Lo cobrado al registrar la venta (contado completo o abono
+            // inicial), por medio de pago y neto de vuelto.
+            const settlement = await this.journalService.buildSettlement(
+              data.tenant_id,
+              data.currency_id,
+              saleDate,
+              payments ?? [],
+              data.change_amount ?? 0,
+              txn,
+            );
+
+            if (isApartado) {
+              // El apartado se contabiliza como venta al completarse
+              // (accounts-receivable completeApartado); aqui solo el abono,
+              // que queda como anticipo contra Cuentas por Cobrar.
+              const upfrontSettled =
+                settlement.cash + settlement.bank + settlement.points;
+              if (upfrontSettled > 0) {
+                await this.journalService.generatePaymentReceivedJournal(
+                  {
+                    tenantId: data.tenant_id,
+                    sourceId: saleId,
+                    amount: upfrontSettled,
+                    settlement,
+                    currencyId: data.currency_id,
+                    entryDate: saleDate,
+                    description: `Abono inicial de apartado - ${saleId}`,
+                  },
+                  txn,
+                );
+              }
+              return;
+            }
+
             await this.journalService.generateSaleJournal(
               {
                 tenantId: data.tenant_id,
@@ -456,32 +518,12 @@ export class SaleService {
                 subtotalAmount: data.subtotal_amount,
                 taxAmount: data.tax_amount,
                 totalAmount: data.total_amount,
-                entryDate: new Date(data.sale_date),
+                settlement,
+                currencyId: data.currency_id,
+                entryDate: saleDate,
               },
               txn,
             );
-
-            let totalCost = 0;
-            for (const item of items) {
-              const res = await txn.query(
-                `SELECT COALESCE(weighted_avg_cost, cost_price, 0) AS item_cost
-                 FROM general_schema.product_variant
-                 WHERE tenant_id = $1 AND product_variant_id = $2 LIMIT 1`,
-                [data.tenant_id, item.product_variant_id],
-              );
-              if (res.rows.length > 0) {
-                const itemCost = Number(res.rows[0].item_cost);
-                await txn.query(
-                  `UPDATE pos_schema.sale_item
-                   SET cost_price_at_sale = $1
-                   WHERE sale_id = $2 AND product_variant_id = $3 AND tenant_id = $4`,
-                  [itemCost, saleId, item.product_variant_id, item.tenant_id],
-                );
-                if (itemCost > 0) {
-                  totalCost += itemCost * item.quantity;
-                }
-              }
-            }
 
             if (totalCost > 0) {
               await this.journalService.generateSaleCogsJournal(
@@ -489,18 +531,13 @@ export class SaleService {
                   tenantId: data.tenant_id,
                   saleId,
                   totalCost,
-                  entryDate: new Date(data.sale_date),
+                  entryDate: saleDate,
                 },
                 txn,
               );
             }
-          } catch (accountingError) {
-            // Log but don't fail the sale — accounting is secondary
-            this.logger.error(
-              `Error generating journal entries for sale ${saleId}: ${(accountingError as Error).message}`,
-            );
-          }
-        }
+          },
+        );
 
         await txn.commit();
       } catch (txnError) {
@@ -511,29 +548,12 @@ export class SaleService {
       // Accumulate loyalty points — non-blocking, must not fail the sale
       if (data.tenant_customer_id) {
         try {
-          const { rows: programRows } = await this.db.query(
-            loyaltyScore.getActiveProgramForTenant,
-            [data.tenant_id],
-          );
-          const program = programRows[0];
-          if (
-            program &&
-            data.total_amount >= Number(program.minimum_purchase_for_points)
-          ) {
-            const earnBase =
-              isCredit || isApartado
-                ? Math.min(upfront, data.total_amount)
-                : data.total_amount;
-            const pointsEarned = Math.floor(
-              earnBase * Number(program.points_earned_per_currency_unit),
-            );
-            if (pointsEarned > 0) {
-              await this.db.query(loyaltyScore.upsertEarned, [
-                data.tenant_id,
-                data.tenant_customer_id,
-                pointsEarned,
-              ]);
-            }
+          if (earnedPoints > 0) {
+            await this.db.query(loyaltyScore.upsertEarned, [
+              data.tenant_id,
+              data.tenant_customer_id,
+              earnedPoints,
+            ]);
           }
           // Deduct redeemed points from any points-redemption payment rows
           const redeemedPoints = (data.payments ?? []).reduce(

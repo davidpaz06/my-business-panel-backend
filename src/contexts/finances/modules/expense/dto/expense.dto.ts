@@ -7,6 +7,9 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsPositive,
+  Min,
+  IsIn,
 } from 'class-validator';
 
 export class CreateExpenseCategoryDto {
@@ -66,20 +69,26 @@ export class CreateExpenseDto {
   @IsString()
   description?: string;
 
+  // FNZ-GA-08: monto sin IVA positivo, IVA no negativo; el total lo calcula el
+  // servidor (amount + tax_amount). Si el cliente lo envia, debe coincidir.
   @IsNotEmpty()
   @IsNumber()
+  @IsPositive()
   amount!: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
   tax_amount?: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
-  total_amount!: number;
+  total_amount?: number;
 
+  // 1 = VES, 2 = USD (general_schema.currency).
   @IsNotEmpty()
   @IsNumber()
+  @IsIn([1, 2])
   currency_id!: number;
 
   @IsNotEmpty()

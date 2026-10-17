@@ -65,14 +65,17 @@ export class LoyaltyService {
     // (totales y top clientes) son a nivel tenant (no tienen dimension de sucursal).
     const branchFilter = branchId ?? null;
 
-    const [programResult, totalsResult, growthResult, topResult] =
+    const [programResult, rateResult, totalsResult, growthResult, topResult] =
       await Promise.all([
         this.db.query(loyaltyQueries.getActiveProgram, [session.tenant_id]),
+        this.db.query(loyaltyQueries.getCurrentRate, [session.tenant_id]),
         this.db.query(loyaltyQueries.getTotals, [session.tenant_id]),
         this.db.query(loyaltyQueries.getGrowth, [
           session.tenant_id,
           bucketUnit,
-          rangeStart,
+          // ISO en UTC: las columnas timestamp guardan hora UTC; un Date crudo se
+          // serializaria con el offset del proceso (que Postgres ignora).
+          rangeStart.toISOString(),
           branchFilter,
         ]),
         this.db.query(loyaltyQueries.getTopCustomers, [session.tenant_id]),
@@ -81,12 +84,20 @@ export class LoyaltyService {
     const config: LoyaltyProgramConfig | null =
       (programResult.rows[0] as LoyaltyProgramConfig | undefined) ?? null;
 
-    // Equivalencia monetaria: valor = puntos / tasa de canje (points_redeemed_per_currency_unit).
+    // Equivalencia monetaria: valor = puntos / tasa de canje
+    // (points_redeemed_per_currency_unit). El programa se define en USD
+    // (FNZ-FI-02); el equivalente en VES usa la tasa de hoy.
     const redeemRate = config
       ? Number(config.points_redeemed_per_currency_unit)
       : 0;
-    const toValue = (points: number): number =>
+    const rawRate = (rateResult.rows[0] as { usd_ves_rate: string | null })
+      ?.usd_ves_rate;
+    const usdVesRate =
+      rawRate !== null && rawRate !== undefined ? Number(rawRate) : null;
+    const toValueUsd = (points: number): number =>
       redeemRate > 0 ? points / redeemRate : 0;
+    const toValueVes = (points: number): number =>
+      toValueUsd(points) * (usdVesRate ?? 0);
 
     const totalsRow = totalsResult.rows[0] as TotalsRow;
     const activePoints = Number(totalsRow.active_points);
@@ -109,7 +120,8 @@ export class LoyaltyService {
       document_number: row.document_number,
       score: Number(row.score),
       lifetime_score: Number(row.lifetime_score),
-      value: toValue(Number(row.score)),
+      value_usd: toValueUsd(Number(row.score)),
+      value_ves: toValueVes(Number(row.score)),
     }));
 
     return {
@@ -117,6 +129,7 @@ export class LoyaltyService {
       range_start: rangeStart.toISOString(),
       bucket_unit: bucketUnit,
       config,
+      usd_ves_rate: usdVesRate,
       totals: {
         active_points: activePoints,
         redeemed_points: redeemedPoints,
@@ -124,10 +137,14 @@ export class LoyaltyService {
         // Sin mecanismo de expiracion de puntos: se reporta 0.
         expired_points: 0,
         customers_with_points: Number(totalsRow.customers_with_points),
-        active_value: toValue(activePoints),
-        redeemed_value: toValue(redeemedPoints),
-        lifetime_value: toValue(lifetimePoints),
-        expired_value: 0,
+        active_value_usd: toValueUsd(activePoints),
+        active_value_ves: toValueVes(activePoints),
+        redeemed_value_usd: toValueUsd(redeemedPoints),
+        redeemed_value_ves: toValueVes(redeemedPoints),
+        lifetime_value_usd: toValueUsd(lifetimePoints),
+        lifetime_value_ves: toValueVes(lifetimePoints),
+        expired_value_usd: 0,
+        expired_value_ves: 0,
       },
       growth,
       top_customers: topCustomers,

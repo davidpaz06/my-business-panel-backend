@@ -1,19 +1,26 @@
-export interface IvaSummaryFromDb {
-  iva_debito: string;
-  iva_credito: string;
-  iva_cxp: string;
-  iva_recuperable: string;
-  iva_notas_credito: string;
-  iva_debito_ajustado: string;
-  iva_neto: string;
+export type IvaComponent =
+  | 'debito'
+  | 'notas_debito'
+  | 'notas_credito'
+  | 'credito'
+  | 'cxp'
+  | 'gastos'
+  | 'retenciones';
+
+export interface IvaSummaryRowFromDb {
+  component: IvaComponent;
+  total_usd: string;
+  total_ves: string;
 }
 
+/** Un componente del IVA en USD y VES, con la tasa de la fecha de cada documento. */
+export interface IvaSummaryRow {
+  component: IvaComponent;
+  total_usd: number;
+  total_ves: number;
+}
+
+// El cliente elige la moneda y calcula recuperable, debito ajustado y neto.
 export interface IvaSummaryResponse {
-  iva_debito: number;
-  iva_credito: number;
-  iva_cxp: number;
-  iva_recuperable: number;
-  iva_notas_credito: number;
-  iva_debito_ajustado: number;
-  iva_neto: number;
+  components: IvaSummaryRow[];
 }

@@ -1,3 +1,10 @@
+import { toUsd, toVes } from '@/contexts/finances/finances.fx';
+
+// Los saldos abiertos (CxP/CxC) se devuelven en su moneda y el frontend los
+// valora a la tasa de hoy: es lo que cuesta saldarlos ahora. Los historiales
+// de pagos y cobros si son historicos: amount_paid_usd / _ves con la tasa de
+// la fecha de cada pago (FNZ-X-02).
+
 export const apOverviewSelect = `
   SELECT
     pap.purchase_account_payable_id,
@@ -5,6 +12,8 @@ export const apOverviewSelect = `
     pap.account_payable_status,
     aps.status_name                                                         AS account_payable_status_name,
     s.supplier_name,
+    -- CxP en USD (moneda base de Compras, currency_id 2).
+    2                                                                       AS currency_id,
     ap.due_date,
     ap.subtotal,
     COALESCE(pap.tax_amount, 0)                                             AS tax_amount,
@@ -46,7 +55,8 @@ export const arGroupByClause = `
     sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
     ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
     tc.first_name, tc.last_name, tc.document_number,
-    dsi.invoice_id,
+    dsi.invoice_id, dsi.invoice_number,
+    sale_b.currency_id,
     ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
     sar.created_at
 `;
@@ -61,6 +71,10 @@ export const arOverviewSelect = `
     (tc.first_name || ' ' || tc.last_name)                                   AS customer_name,
     tc.document_number                                                        AS customer_document,
     dsi.invoice_id AS digital_sale_invoice_id,
+    -- Correlativo SENIAT por tenant (null en facturas anteriores a la mig 040).
+    dsi.invoice_number,
+    -- ar.subtotal / tax_amount / amount_paid estan en la moneda de la venta.
+    COALESCE(sale_b.currency_id, 1)                                           AS currency_id,
     ar.due_date,
     ar.subtotal,
     COALESCE(sar.tax_amount, 0)                                               AS tax_amount,
@@ -111,7 +125,8 @@ export const accountsOverviewQueries = {
         sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
         ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
         tc.first_name, tc.last_name, tc.document_number,
-        dsi.invoice_id,
+        dsi.invoice_id, dsi.invoice_number,
+        sale_b.currency_id,
         ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
         sar.created_at
       ORDER BY ar.due_date DESC, sar.created_at DESC
@@ -124,7 +139,8 @@ export const accountsOverviewQueries = {
         sar.sale_account_receivable_id, sar.sale_id, sar.account_receivable_status,
         ars.status_name, ar.account_receivable_id, ar.tenant_id, ar.tenant_customer_id,
         tc.first_name, tc.last_name, tc.document_number,
-        dsi.invoice_id,
+        dsi.invoice_id, dsi.invoice_number,
+        sale_b.currency_id,
         ar.due_date, ar.subtotal, sar.tax_amount, ar.amount_paid, ar.is_paid,
         sar.created_at
       ORDER BY ar.due_date DESC, sar.created_at DESC
@@ -139,13 +155,27 @@ export const accountsOverviewQueries = {
         pop.payment_method_id,
         pm.name        AS payment_method_name,
         pop.amount_paid,
+        pop.currency_id,
+        ${toUsd('pop.amount_paid', 'pop.currency_id', 'fx.rate')} AS amount_paid_usd,
+        ${toVes('pop.amount_paid', 'pop.currency_id', 'fx.rate')} AS amount_paid_ves,
         pop.payment_reference,
         pop.notes,
         pop.payment_date,
         pop.created_at
       FROM purchase_schema.purchase_order_payment pop
+      JOIN purchase_schema.purchase_account_payable pap
+        ON pap.purchase_account_payable_id = pop.purchase_account_payable_id
+      JOIN purchase_schema.purchase_order po
+        ON po.purchase_order_id = pap.purchase_order_id
+      JOIN inventory_schema.warehouse w
+        ON w.warehouse_id = po.warehouse_id
+      JOIN general_schema.branch b
+        ON b.branch_id = w.branch_id
       LEFT JOIN general_schema.payment_method pm
         ON pm.payment_method_id = pop.payment_method_id
+      CROSS JOIN LATERAL (
+        SELECT general_schema.get_exchange_rate_at(b.tenant_id, pop.payment_date) AS rate
+      ) fx
       WHERE pop.purchase_account_payable_id = $1
       ORDER BY pop.payment_date DESC, pop.created_at DESC
     `,
@@ -175,13 +205,24 @@ export const accountsOverviewQueries = {
         sc.original_amount,
         sc.exchange_rate,
         sc.currency_id,
+        ${toUsd('sc.amount_paid', 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS amount_paid_usd,
+        ${toVes('sc.amount_paid', 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS amount_paid_ves,
         sc.payment_reference,
         sc.notes,
         sc.payment_date,
         sc.created_at
       FROM pos_schema.sale_collection sc
+      JOIN pos_schema.sale_account_receivable sar
+        ON sar.sale_account_receivable_id = sc.sale_account_receivable_id
+      JOIN general_schema.account_receivable ar
+        ON ar.account_receivable_id = sar.account_receivable_id
+      JOIN pos_schema.sale s
+        ON s.sale_id = sar.sale_id
       LEFT JOIN general_schema.payment_method pm
         ON pm.payment_method_id = sc.payment_method_id
+      CROSS JOIN LATERAL (
+        SELECT general_schema.get_exchange_rate_at(ar.tenant_id, sc.payment_date) AS rate
+      ) fx
       WHERE sc.sale_account_receivable_id = $1
       ORDER BY sc.payment_date DESC, sc.created_at DESC
     `,

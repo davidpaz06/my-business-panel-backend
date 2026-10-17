@@ -4,6 +4,7 @@ import Database from '@crane-technologies/database';
 import type { ITransaction } from '@crane-technologies/database/dist/interfaces/ITransaction';
 import {
   Promo,
+  PromoAnalytics,
   PromoAnalyticsRow,
   PromoRule,
   PromoWithRule,
@@ -328,14 +329,24 @@ export class PromosService {
     interval: string,
     isActive?: boolean,
     branchId?: string,
-  ): Promise<PromoAnalyticsRow[]> {
+    promotionType?: string,
+  ): Promise<PromoAnalytics> {
     const pgInterval = this.INTERVAL_MAP[interval] ?? '30 days';
-    const result = await this.db.query(promotions.getAnalytics, [
+    // El filtro por tipo se aplica en la consulta (FNZ-PR-02).
+    const params = [
       tenantId,
       pgInterval,
       isActive ?? null,
       branchId ?? null,
+      promotionType || null,
+    ];
+    const [rows, count] = await Promise.all([
+      this.db.query(promotions.getAnalytics, params),
+      this.db.query(promotions.getAnalyticsSalesCount, params),
     ]);
-    return result.rows;
+    return {
+      promotions: rows.rows as PromoAnalyticsRow[],
+      sales_with_promotion: Number(count.rows[0]?.sales_with_promotion ?? 0),
+    };
   }
 }

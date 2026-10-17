@@ -63,7 +63,3 @@ cabys_tree.json
 
 certificado.p12
 
-# Docker image files 
-postgres-data
-redis-data
-redis-insight-data

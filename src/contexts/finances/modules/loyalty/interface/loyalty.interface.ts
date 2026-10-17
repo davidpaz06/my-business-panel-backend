@@ -26,10 +26,16 @@ export interface LoyaltyTotals {
   lifetime_points: number;
   expired_points: number;
   customers_with_points: number;
-  active_value: number;
-  redeemed_value: number;
-  lifetime_value: number;
-  expired_value: number;
+  // Equivalencia monetaria en USD (moneda del programa, FNZ-FI-02) y en VES a
+  // la tasa de hoy; el frontend elige la columna segun el toggle de moneda.
+  active_value_usd: number;
+  active_value_ves: number;
+  redeemed_value_usd: number;
+  redeemed_value_ves: number;
+  lifetime_value_usd: number;
+  lifetime_value_ves: number;
+  expired_value_usd: number;
+  expired_value_ves: number;
 }
 
 export interface LoyaltyGrowthPoint {
@@ -44,7 +50,8 @@ export interface LoyaltyTopCustomer {
   document_number: string | null;
   score: number;
   lifetime_score: number;
-  value: number;
+  value_usd: number;
+  value_ves: number;
 }
 
 export interface LoyaltyOverview {
@@ -52,6 +59,8 @@ export interface LoyaltyOverview {
   range_start: string;
   bucket_unit: BucketUnit;
   config: LoyaltyProgramConfig | null;
+  /** Tasa USD -> VES de hoy con la que se valoran los equivalentes en VES. */
+  usd_ves_rate: number | null;
   totals: LoyaltyTotals;
   growth: LoyaltyGrowthPoint[];
   top_customers: LoyaltyTopCustomer[];

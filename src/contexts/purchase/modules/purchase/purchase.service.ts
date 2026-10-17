@@ -200,29 +200,37 @@ export class PurchaseService {
         purchase_account_payable_id,
       ]);
 
-      try {
-        const paymentInfo = await txn.query(
-          payments.getPaymentAmountForJournal,
-          [paymentId],
-        );
-        if (paymentInfo.rows.length > 0) {
-          const { tenant_id, purchase_order_id } = paymentInfo.rows[0];
+      // Asiento secundario en savepoint (FNZ-X-04): un error del asiento ya
+      // no aborta la transaccion del pago. Moneda y medio de pago reales.
+      await this.journalService.trySecondary(
+        txn,
+        `pago a proveedor ${paymentId}`,
+        async () => {
+          const paymentInfo = await txn.query(
+            payments.getPaymentAmountForJournal,
+            [paymentId],
+          );
+          if (paymentInfo.rows.length === 0) return;
+          const {
+            tenant_id,
+            purchase_order_id,
+            currency_id,
+            payment_method_id,
+          } = paymentInfo.rows[0];
           await this.journalService.generatePaymentMadeJournal(
             {
               tenantId: tenant_id,
               sourceId: purchase_order_id,
               amount: Number(amount_paid),
+              currencyId: Number(currency_id ?? 2),
+              paymentMethodId: payment_method_id,
               entryDate: new Date(),
               description: `Pago a proveedor - OC ${purchase_order_id}`,
             },
             txn,
           );
-        }
-      } catch (accountingError) {
-        this.logger.error(
-          `Error generating payment journal for payment ${paymentId}: ${(accountingError as Error).message}`,
-        );
-      }
+        },
+      );
 
       await txn.commit();
 
@@ -655,12 +663,16 @@ export class PurchaseService {
       // warehouseService aqui, correria en otra conexion fuera de esta txn.
       await txn.query(goodsReceipt.confirm, [goodsReceiptId]);
 
-      try {
-        const amountsResult = await txn.query(
-          purchase.getOrderAmountsForJournal,
-          [access.purchase_order_id],
-        );
-        if (amountsResult.rows.length > 0) {
+      // Asiento secundario en savepoint (FNZ-X-04). Compras en USD.
+      await this.journalService.trySecondary(
+        txn,
+        `compra ${access.purchase_order_id}`,
+        async () => {
+          const amountsResult = await txn.query(
+            purchase.getOrderAmountsForJournal,
+            [access.purchase_order_id],
+          );
+          if (amountsResult.rows.length === 0) return;
           const row = amountsResult.rows[0];
           await this.journalService.generatePurchaseJournal(
             {
@@ -673,12 +685,8 @@ export class PurchaseService {
             },
             txn,
           );
-        }
-      } catch (accountingError) {
-        this.logger.error(
-          `Error generating purchase journal for order ${access.purchase_order_id}: ${(accountingError as Error).message}`,
-        );
-      }
+        },
+      );
 
       await txn.commit();
     } catch (error) {

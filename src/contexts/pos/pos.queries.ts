@@ -1,3 +1,4 @@
+import { rateAt, toUsd, toVes } from '@/contexts/finances/finances.fx';
 import { createQueries } from '@crane-technologies/database';
 
 export const posQueryDefs = {
@@ -93,6 +94,21 @@ export const posQueryDefs = {
       DELETE FROM pos_schema.sale_item
       WHERE sale_item_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2)
       RETURNING sale_item_id
+    `,
+    // Fija el costo unitario (USD, catalogo) de los items de una venta que aun
+    // no lo tienen. Independiente de la contabilidad: sin este costo la venta
+    // aparece en Rentabilidad con margen 100%. Solo toca filas en NULL, asi
+    // que es idempotente y no pisa el costo de una venta ya registrada.
+    // $1 = sale_id. Devuelve cantidad y costo para el asiento de costo de ventas.
+    fixCostAtSale: `
+      UPDATE pos_schema.sale_item si
+      SET cost_price_at_sale = COALESCE(pv.weighted_avg_cost, pv.cost_price, 0)
+      FROM general_schema.product_variant pv
+      WHERE si.sale_id = $1
+        AND si.cost_price_at_sale IS NULL
+        AND pv.tenant_id = si.tenant_id
+        AND pv.product_variant_id = si.product_variant_id
+      RETURNING si.quantity, si.cost_price_at_sale
     `,
   },
 
@@ -303,6 +319,32 @@ export const posQueryDefs = {
   },
 
   returns: {
+    // IVA de cada linea a devolver (tasa de su linea de factura y si el
+    // precio ya lo incluye), para el asiento de la devolucion. Se lee ANTES de
+    // insertar la devolucion: el trigger puede borrar la linea.
+    getLineTaxInfo: `
+      SELECT
+        si.sale_item_id,
+        COALESCE(ii.tax_rate_percentage, 0)::float8 AS tax_rate,
+        COALESCE(pv.includes_iva, FALSE) AS includes_iva
+      FROM pos_schema.sale_item si
+      LEFT JOIN pos_schema.invoice_item ii ON ii.sale_item_id = si.sale_item_id
+      LEFT JOIN general_schema.product_variant pv
+        ON pv.tenant_id = si.tenant_id
+       AND pv.product_variant_id = si.product_variant_id
+      WHERE si.sale_item_id = ANY($1::uuid[])
+    `,
+    // Lo que el cliente aun debe de la venta (sin fila = no hay CxC).
+    getReceivableBalance: `
+      SELECT GREATEST(
+        (ar.subtotal + COALESCE(sar.tax_amount, 0)) - ar.amount_paid, 0
+      )::float8 AS balance
+      FROM pos_schema.sale_account_receivable sar
+      JOIN general_schema.account_receivable ar
+        ON ar.account_receivable_id = sar.account_receivable_id
+      WHERE sar.sale_id = $1
+      LIMIT 1
+    `,
     newTransaction: `
       INSERT INTO pos_schema.return_transaction (invoice_id, tenant_customer_id, total_refund_amount, refund_method, return_status_id, description, return_date)
       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamp, NOW()))
@@ -781,17 +823,21 @@ export const posQueryDefs = {
         AND CURRENT_DATE BETWEEN p.promotion_start_date AND p.promotion_end_date
       ORDER BY p.created_at DESC
     `,
+    // Montos en USD y VES con la tasa de la fecha de cada venta (FNZ-X-02).
     getAnalytics: `
       WITH filtered_items AS (
         SELECT
           si.promotion_id,
           si.sale_id,
-          si.discount_applied,
-          si.total_price,
-          s.currency_id
+          ${toUsd('COALESCE(si.discount_applied, 0)', 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS discount_usd,
+          ${toVes('COALESCE(si.discount_applied, 0)', 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS discount_ves,
+          ${toUsd('si.total_price', 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS revenue_usd,
+          ${toVes('si.total_price', 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS revenue_ves
         FROM pos_schema.sale_item si
         INNER JOIN pos_schema.sale s ON s.sale_id = si.sale_id
+        CROSS JOIN LATERAL (SELECT ${rateAt('$1', 's.sale_date')} AS rate) fx
         WHERE s.is_completed = TRUE
+          AND si.tenant_id = $1
           AND s.sale_date >= CURRENT_TIMESTAMP - $2::interval
           AND ($4::uuid IS NULL OR s.branch_id = $4::uuid)
           AND si.promotion_id IS NOT NULL
@@ -802,19 +848,37 @@ export const posQueryDefs = {
         p.promotion_code,
         p.is_active,
         pt.type_name AS promotion_type,
-        COALESCE(fi.currency_id, 1) AS currency_id,
         COUNT(DISTINCT fi.sale_id)::text AS sale_count,
-        COALESCE(SUM(fi.discount_applied), 0)::text AS total_discount,
-        COALESCE(SUM(fi.total_price), 0)::text AS total_revenue
+        COALESCE(SUM(fi.discount_usd), 0)::text AS total_discount_usd,
+        COALESCE(SUM(fi.discount_ves), 0)::text AS total_discount_ves,
+        COALESCE(SUM(fi.revenue_usd), 0)::text AS total_revenue_usd,
+        COALESCE(SUM(fi.revenue_ves), 0)::text AS total_revenue_ves
       FROM pos_schema.promotion p
       INNER JOIN pos_schema.promotion_type pt ON pt.promotion_type_id = p.promotion_type_id
       LEFT JOIN filtered_items fi ON fi.promotion_id = p.promotion_id
       WHERE p.tenant_id = $1
         AND ($3::boolean IS NULL OR p.is_active = $3)
+        AND ($5::text IS NULL OR pt.type_name = $5)
       GROUP BY
-        p.promotion_id, p.promotion_name, p.promotion_code, p.is_active, pt.type_name,
-        COALESCE(fi.currency_id, 1)
-      ORDER BY SUM(fi.discount_applied) DESC NULLS LAST
+        p.promotion_id, p.promotion_name, p.promotion_code, p.is_active, pt.type_name
+      ORDER BY SUM(fi.discount_usd) DESC NULLS LAST
+    `,
+    // Ventas distintas que aplicaron alguna promocion (FNZ-PR-01): una venta
+    // con dos promociones cuenta una sola vez, a diferencia de sumar el
+    // sale_count de cada fila de getAnalytics. Mismos filtros ($1..$5).
+    getAnalyticsSalesCount: `
+      SELECT COUNT(DISTINCT si.sale_id)::text AS sales_with_promotion
+      FROM pos_schema.sale_item si
+      INNER JOIN pos_schema.sale s ON s.sale_id = si.sale_id
+      INNER JOIN pos_schema.promotion p ON p.promotion_id = si.promotion_id
+      INNER JOIN pos_schema.promotion_type pt ON pt.promotion_type_id = p.promotion_type_id
+      WHERE s.is_completed = TRUE
+        AND si.tenant_id = $1
+        AND p.tenant_id = $1
+        AND s.sale_date >= CURRENT_TIMESTAMP - $2::interval
+        AND ($3::boolean IS NULL OR p.is_active = $3)
+        AND ($4::uuid IS NULL OR s.branch_id = $4::uuid)
+        AND ($5::text IS NULL OR pt.type_name = $5)
     `,
   },
 
@@ -902,6 +966,13 @@ export const posQueryDefs = {
       WHERE tenant_id = $1 AND is_active = true
       LIMIT 1
     `,
+    // Ledger de puntos otorgados por un cobro de CxC (FNZ-FI-03, mig 046).
+    // transaction_type_id 1 = 'earn'.
+    insertCollectionEarned: `
+      INSERT INTO pos_schema.score_transaction
+        (tenant_id, tenant_customer_id, transaction_type_id, points, sale_id, sale_collection_id)
+      VALUES ($1, $2, 1, $3, $4, $5)
+    `,
     upsertEarned: `
       INSERT INTO pos_schema.tenant_customer_score (tenant_id, tenant_customer_id, score, lifetime_score, score_redeemed, last_earned_at)
       VALUES ($1, $2, $3, $3, 0, NOW())
@@ -962,6 +1033,29 @@ export const posQueryDefs = {
   creditDebitNote: {
     // Contexto de la factura + saldo pendiente (si tiene AR) para validar
     // que un credito no exceda lo que aun se debe.
+    // Contexto para el asiento de una nota: proporcion de IVA de la factura,
+    // moneda y lo que el cliente aun debe de la venta. Se lee ANTES de insertar
+    // la nota (el trigger apply_credit_debit_note_to_ar ajusta la CxC).
+    getJournalContext: `
+      SELECT
+        i.subtotal_amount::float8 AS subtotal_amount,
+        i.total_amount::float8 AS total_amount,
+        COALESCE(i.currency_id, s.currency_id, 1) AS currency_id,
+        (
+          SELECT GREATEST(
+            (ar.subtotal + COALESCE(sar.tax_amount, 0)) - ar.amount_paid, 0
+          )::float8
+          FROM pos_schema.sale_account_receivable sar
+          JOIN general_schema.account_receivable ar
+            ON ar.account_receivable_id = sar.account_receivable_id
+          WHERE sar.sale_id = s.sale_id
+          LIMIT 1
+        ) AS receivable_balance
+      FROM pos_schema.invoice i
+      JOIN pos_schema.sale s ON s.sale_id = i.sale_id
+      WHERE i.invoice_id = $1
+      LIMIT 1
+    `,
     getInvoiceContext: `
       SELECT
         i.invoice_id,

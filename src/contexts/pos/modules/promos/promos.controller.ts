@@ -50,6 +50,7 @@ export class PromosController {
     @Query('interval') interval: string = '30d',
     @Query('isActive') isActive?: string,
     @Query('branchId') branchId?: string,
+    @Query('type') promotionType?: string,
   ) {
     const scopedTenantId = this.tenantScope.resolveRequestedTenant(
       session,
@@ -69,6 +70,7 @@ export class PromosController {
       interval,
       activeFilter,
       branchId,
+      promotionType,
     );
   }
 

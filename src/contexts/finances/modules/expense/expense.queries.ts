@@ -1,3 +1,23 @@
+import {
+  dateNoonUtc,
+  rateAt,
+  sumBoth,
+  toUsd,
+  toVes,
+} from '@/contexts/finances/finances.fx';
+import {
+  localTs,
+  timestampInLocalDays,
+} from '@/contexts/finances/finances.time';
+import {
+  accruedSaleFilter,
+  netNoteAmount,
+  netReturnAmount,
+  netSaleAmount,
+  noteCurrency,
+  saleItemJoins,
+} from '@/contexts/finances/finances.sales';
+
 export const expenseQueries = {
   // -------------------------------------------------------
   // EXPENSE CATEGORIES
@@ -242,15 +262,20 @@ export const expenseQueries = {
   // ANALYTICS
   // -------------------------------------------------------
 
+  // Los analiticos devuelven cada monto en USD y VES (<campo>_usd /
+  // <campo>_ves), convertido con la tasa vigente en la fecha del gasto o de la
+  // venta (FNZ-X-02). expense_date es date: tasa del mediodia local de ese dia.
   analyticsFixedVsVariable: `
     SELECT
       ec.is_fixed,
       CASE WHEN ec.is_fixed THEN 'Fijo' ELSE 'Variable' END AS expense_type,
-      COALESCE(SUM(e.total_amount), 0)::text AS total_amount
+      ${sumBoth('total', 'e.total_amount', 'e.currency_id', 'fx.rate')}
     FROM accounting_schema.expense e
     INNER JOIN accounting_schema.expense_category ec ON ec.category_id = e.category_id
+    CROSS JOIN LATERAL (SELECT ${rateAt('$1', dateNoonUtc('e.expense_date'))} AS rate) fx
     WHERE e.tenant_id = $1
       AND e.expense_date BETWEEN $2::date AND $3::date
+      AND ($4::uuid IS NULL OR e.branch_id = $4::uuid)
     GROUP BY ec.is_fixed
   `,
 
@@ -259,14 +284,16 @@ export const expenseQueries = {
       ec.category_id,
       ec.name AS category_name,
       ec.account_code,
-      COALESCE(SUM(e.total_amount), 0)::text AS total_amount
+      ${sumBoth('total', 'e.total_amount', 'e.currency_id', 'fx.rate')}
     FROM accounting_schema.expense e
     INNER JOIN accounting_schema.expense_category ec ON ec.category_id = e.category_id
+    CROSS JOIN LATERAL (SELECT ${rateAt('$1', dateNoonUtc('e.expense_date'))} AS rate) fx
     WHERE e.tenant_id = $1
       AND ec.is_fixed = TRUE
       AND e.expense_date BETWEEN $2::date AND $3::date
+      AND ($4::uuid IS NULL OR e.branch_id = $4::uuid)
     GROUP BY ec.category_id, ec.name, ec.account_code
-    ORDER BY SUM(e.total_amount) DESC
+    ORDER BY 4 DESC
   `,
 
   analyticsVariableBreakdown: `
@@ -274,47 +301,125 @@ export const expenseQueries = {
       ec.category_id,
       ec.name AS category_name,
       ec.account_code,
-      COALESCE(SUM(e.total_amount), 0)::text AS total_amount
+      ${sumBoth('total', 'e.total_amount', 'e.currency_id', 'fx.rate')}
     FROM accounting_schema.expense e
     INNER JOIN accounting_schema.expense_category ec ON ec.category_id = e.category_id
+    CROSS JOIN LATERAL (SELECT ${rateAt('$1', dateNoonUtc('e.expense_date'))} AS rate) fx
     WHERE e.tenant_id = $1
       AND ec.is_fixed = FALSE
       AND e.expense_date BETWEEN $2::date AND $3::date
+      AND ($4::uuid IS NULL OR e.branch_id = $4::uuid)
     GROUP BY ec.category_id, ec.name, ec.account_code
-    ORDER BY SUM(e.total_amount) DESC
+    ORDER BY 4 DESC
   `,
 
+  // Una fila por periodo (dia local): ventas netas y gastos en USD y VES, cada
+  // movimiento convertido con la tasa de su fecha. Las ventas van sin IVA, con
+  // criterio devengado y netas de devoluciones y notas de credito/debito, igual
+  // que Rentabilidad (finances.sales.ts; FNZ-GA-03). Los gastos se suman con su
+  // total (el IVA de un gasto es credito fiscal, pero se paga igual).
   analyticsSalesVsExpenses: `
-    WITH daily_sales AS (
+    SELECT
+      period,
+      COALESCE(SUM(sales_usd), 0)::text    AS total_sales_usd,
+      COALESCE(SUM(sales_ves), 0)::text    AS total_sales_ves,
+      COALESCE(SUM(expenses_usd), 0)::text AS total_expenses_usd,
+      COALESCE(SUM(expenses_ves), 0)::text AS total_expenses_ves
+    FROM (
       SELECT
-        DATE(s.sale_date) AS period,
-        COALESCE(SUM(si.total_price), 0) AS total_sales
+        (${localTs('s.sale_date')})::date::text AS period,
+        ${toUsd(netSaleAmount, 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS sales_usd,
+        ${toVes(netSaleAmount, 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS sales_ves,
+        0::numeric AS expenses_usd,
+        0::numeric AS expenses_ves
       FROM pos_schema.sale s
       INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
       INNER JOIN pos_schema.sale_item si ON si.sale_id = s.sale_id
+      ${saleItemJoins}
+      CROSS JOIN LATERAL (SELECT ${rateAt('$1', 's.sale_date')} AS rate) fx
       WHERE b.tenant_id = $1
-        AND s.is_completed = TRUE
-        AND s.sale_date::date BETWEEN $2::date AND $3::date
+        AND ${accruedSaleFilter}
+        AND ${timestampInLocalDays('s.sale_date', '$2', '$3')}
         AND ($4::uuid IS NULL OR s.branch_id = $4::uuid)
-      GROUP BY DATE(s.sale_date)
-    ),
-    daily_expenses AS (
+
+      UNION ALL
+
+      -- Devoluciones: restan ventas en la fecha de la devolucion.
       SELECT
-        DATE(e.expense_date) AS period,
-        COALESCE(SUM(e.total_amount), 0) AS total_expenses
+        (${localTs('rt.return_date')})::date::text AS period,
+        -${toUsd(netReturnAmount, 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS sales_usd,
+        -${toVes(netReturnAmount, 'COALESCE(s.currency_id, 1)', 'fx.rate')} AS sales_ves,
+        0::numeric AS expenses_usd,
+        0::numeric AS expenses_ves
+      FROM pos_schema.return_product rp
+      INNER JOIN pos_schema.return_transaction rt
+        ON rt.return_transaction_id = rp.return_transaction_id
+      INNER JOIN pos_schema.sale_item si ON si.sale_item_id = rp.sale_item_id
+      INNER JOIN pos_schema.sale s ON s.sale_id = si.sale_id
+      INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
+      ${saleItemJoins}
+      CROSS JOIN LATERAL (SELECT ${rateAt('$1', 'rt.return_date')} AS rate) fx
+      WHERE b.tenant_id = $1
+        AND ${timestampInLocalDays('rt.return_date', '$2', '$3')}
+        AND ($4::uuid IS NULL OR s.branch_id = $4::uuid)
+
+      UNION ALL
+
+      -- Notas de credito (restan) y debito (suman), activas.
+      SELECT
+        (${localTs('cdn.created_at')})::date::text AS period,
+        ${toUsd(netNoteAmount, noteCurrency, 'fx.rate')} AS sales_usd,
+        ${toVes(netNoteAmount, noteCurrency, 'fx.rate')} AS sales_ves,
+        0::numeric AS expenses_usd,
+        0::numeric AS expenses_ves
+      FROM pos_schema.credit_debit_note cdn
+      INNER JOIN pos_schema.invoice inv ON inv.invoice_id = cdn.invoice_id
+      INNER JOIN pos_schema.sale s ON s.sale_id = inv.sale_id
+      INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
+      CROSS JOIN LATERAL (SELECT ${rateAt('$1', 'cdn.created_at')} AS rate) fx
+      WHERE b.tenant_id = $1
+        AND cdn.tenant_id = $1
+        AND cdn.is_voided = FALSE
+        AND ${timestampInLocalDays('cdn.created_at', '$2', '$3')}
+        AND ($4::uuid IS NULL OR s.branch_id = $4::uuid)
+
+      UNION ALL
+
+      SELECT
+        DATE(e.expense_date)::text AS period,
+        0::numeric AS sales_usd,
+        0::numeric AS sales_ves,
+        ${toUsd('e.total_amount', 'e.currency_id', 'fx.rate')} AS expenses_usd,
+        ${toVes('e.total_amount', 'e.currency_id', 'fx.rate')} AS expenses_ves
       FROM accounting_schema.expense e
+      CROSS JOIN LATERAL (SELECT ${rateAt('$1', dateNoonUtc('e.expense_date'))} AS rate) fx
       WHERE e.tenant_id = $1
         AND e.expense_date BETWEEN $2::date AND $3::date
         AND ($4::uuid IS NULL OR e.branch_id = $4::uuid)
-      GROUP BY DATE(e.expense_date)
-    )
-    SELECT
-      COALESCE(s.period, ex.period)::text AS period,
-      COALESCE(s.total_sales, 0)::text AS total_sales,
-      COALESCE(ex.total_expenses, 0)::text AS total_expenses
-    FROM daily_sales s
-    FULL OUTER JOIN daily_expenses ex ON s.period = ex.period
+    ) combined
+    GROUP BY period
     ORDER BY period
+  `,
+
+  // Nomina del rango: planillas cerradas (Completed) cuya fecha de pago cae en
+  // los dias locales [$2, $3], con filtro opcional de sucursal ($4). Devuelve
+  // el costo (total devengado; el neto si el devengado quedo en 0) y el neto
+  // pagado, en USD y VES con la tasa del dia de pago. La nomina se liquida en
+  // bolivares (currency_id 1).
+  analyticsPayroll: `
+    SELECT
+      COUNT(*)::int AS paysheet_count,
+      ${sumBoth('gross_total', 'COALESCE(NULLIF(ps.total_earnings, 0), ps.net_total)', '1', 'fx.rate')},
+      ${sumBoth('net_total', 'ps.net_total', '1', 'fx.rate')}
+    FROM hr_schema.paysheet ps
+    INNER JOIN hr_schema.paysheet_status pst
+      ON pst.status_id = ps.status_id
+    CROSS JOIN LATERAL (SELECT ${rateAt('$1', 'ps.payment_date')} AS rate) fx
+    WHERE ps.tenant_id = $1
+      AND pst.status_description = 'Completed'
+      AND ps.payment_date IS NOT NULL
+      AND ${timestampInLocalDays('ps.payment_date', '$2', '$3')}
+      AND ($4::uuid IS NULL OR ps.branch_id = $4::uuid)
   `,
 
   // -------------------------------------------------------
@@ -325,6 +430,16 @@ export const expenseQueries = {
     SELECT * FROM accounting_schema.fiscal_period
     WHERE tenant_id = $1
     ORDER BY start_date DESC
+  `,
+
+  // Periodo fiscal cerrado que contiene una fecha (FNZ-GA-09).
+  getClosedPeriodForDate: `
+    SELECT period_id, name
+    FROM accounting_schema.fiscal_period
+    WHERE tenant_id = $1
+      AND is_closed = TRUE
+      AND $2::date BETWEEN start_date AND end_date
+    LIMIT 1
   `,
 
   getFiscalPeriodById: `
@@ -345,166 +460,5 @@ export const expenseQueries = {
     SET is_closed = TRUE, closed_at = CURRENT_TIMESTAMP
     WHERE period_id = $1 AND tenant_id = $2 AND is_closed = FALSE
     RETURNING period_id
-  `,
-
-  // -------------------------------------------------------
-  // ANALYTICS
-  // -------------------------------------------------------
-
-  getFixedVsVariableSummary: `
-    WITH accounting_totals AS (
-      SELECT
-        ec.is_fixed,
-        COALESCE(SUM(e.total_amount), 0) AS subtotal
-      FROM accounting_schema.expense_category ec
-      LEFT JOIN accounting_schema.expense e
-        ON  e.category_id = ec.category_id
-        AND e.tenant_id   = $1
-        AND e.expense_date >= $2::date
-        AND e.expense_date <= $3::date
-      WHERE ec.tenant_id = $1
-        AND ec.is_active  = TRUE
-      GROUP BY ec.is_fixed
-    ),
-    pos_totals AS (
-      SELECT
-        FALSE                               AS is_fixed,
-        COALESCE(SUM(pe.expense_amount), 0) AS subtotal
-      FROM pos_schema.expense pe
-      INNER JOIN general_schema.branch b ON b.branch_id = pe.branch_id
-      WHERE b.tenant_id       = $1
-        AND pe.status         = 'approved'
-        AND pe.created_at::date >= $2::date
-        AND pe.created_at::date <= $3::date
-    )
-    SELECT
-      is_fixed,
-      CASE WHEN is_fixed THEN 'Fijo' ELSE 'Variable' END AS expense_type,
-      SUM(subtotal)::text AS total_amount
-    FROM (
-      SELECT * FROM accounting_totals
-      UNION ALL
-      SELECT * FROM pos_totals
-    ) combined
-    GROUP BY is_fixed
-    ORDER BY is_fixed DESC
-  `,
-
-  getFixedCategoryBreakdown: `
-    SELECT
-      ec.category_id::text,
-      ec.name           AS category_name,
-      ec.account_code,
-      COALESCE(SUM(e.total_amount), 0)::text AS total_amount
-    FROM accounting_schema.expense_category ec
-    LEFT JOIN accounting_schema.expense e
-      ON  e.category_id = ec.category_id
-      AND e.tenant_id   = $1
-      AND e.expense_date >= $2::date
-      AND e.expense_date <= $3::date
-    WHERE ec.tenant_id = $1
-      AND ec.is_active  = TRUE
-      AND ec.is_fixed   = TRUE
-    GROUP BY ec.category_id, ec.name, ec.account_code
-    ORDER BY SUM(e.total_amount) DESC NULLS LAST
-  `,
-
-  getVariableCategoryBreakdown: `
-    WITH accounting_var AS (
-      SELECT
-        ec.category_id::text AS category_id,
-        ec.name              AS category_name,
-        ec.account_code,
-        COALESCE(SUM(e.total_amount), 0) AS subtotal
-      FROM accounting_schema.expense_category ec
-      LEFT JOIN accounting_schema.expense e
-        ON  e.category_id = ec.category_id
-        AND e.tenant_id   = $1
-        AND e.expense_date >= $2::date
-        AND e.expense_date <= $3::date
-      WHERE ec.tenant_id = $1
-        AND ec.is_active  = TRUE
-        AND ec.is_fixed   = FALSE
-      GROUP BY ec.category_id, ec.name, ec.account_code
-    ),
-    pos_var AS (
-      SELECT
-        et.expense_type_id::text  AS category_id,
-        et.expense_type_name      AS category_name,
-        'POS'                     AS account_code,
-        COALESCE(SUM(pe.expense_amount), 0) AS subtotal
-      FROM pos_schema.expense pe
-      INNER JOIN pos_schema.expense_type et ON et.expense_type_id = pe.expense_type_id
-      INNER JOIN general_schema.branch   b  ON b.branch_id        = pe.branch_id
-      WHERE b.tenant_id       = $1
-        AND pe.status         = 'approved'
-        AND pe.created_at::date >= $2::date
-        AND pe.created_at::date <= $3::date
-      GROUP BY et.expense_type_id, et.expense_type_name
-    )
-    SELECT
-      category_id,
-      category_name,
-      account_code,
-      SUM(subtotal)::text AS total_amount
-    FROM (
-      SELECT * FROM accounting_var
-      UNION ALL
-      SELECT * FROM pos_var
-    ) combined
-    GROUP BY category_id, category_name, account_code
-    ORDER BY SUM(subtotal) DESC NULLS LAST
-  `,
-
-  getSalesVsExpenses: `
-    -- Tasa efectiva del tenant (base + su diferencial). Antes esto buscaba
-    -- currency_code = 'CRC' -- moneda que dejo de existir en la migracion a
-    -- Venezuela -- por lo que latest_rates quedaba vacio y las ventas en USD
-    -- se sumaban como si 1 USD = 1 Bs. contra gastos en Bs.
-    latest_rates AS (
-      SELECT effective_rate AS rate
-      FROM general_schema.get_effective_exchange_rate($1::uuid)
-    ),
-    ves_currency AS (
-      SELECT currency_id FROM general_schema.currency WHERE currency_code = 'VES' LIMIT 1
-    ),
-    sales_agg AS (
-      SELECT
-        DATE_TRUNC('{{GRANULARITY}}', s.sale_date)::text AS period,
-        COALESCE(SUM(
-          CASE
-            WHEN s.currency_id = (SELECT currency_id FROM ves_currency)
-              THEN s.total_amount
-            ELSE s.total_amount * COALESCE((SELECT lr.rate FROM latest_rates lr), 1)
-          END
-        ), 0) AS total_sales
-      FROM pos_schema.sale s
-      INNER JOIN general_schema.branch b ON b.branch_id = s.branch_id
-      WHERE b.tenant_id       = $1
-        AND s.is_completed    = TRUE
-        AND s.is_refunded     = FALSE
-        AND s.sale_date::date >= $2::date
-        AND s.sale_date::date <= $3::date
-        AND ($4::uuid IS NULL OR s.branch_id = $4::uuid)
-      GROUP BY DATE_TRUNC('{{GRANULARITY}}', s.sale_date)
-    ),
-    expense_agg AS (
-      SELECT
-        DATE_TRUNC('{{GRANULARITY}}', e.expense_date::timestamptz)::text AS period,
-        COALESCE(SUM(e.total_amount), 0) AS total_expenses
-      FROM accounting_schema.expense e
-      WHERE e.tenant_id      = $1
-        AND e.expense_date  >= $2::date
-        AND e.expense_date  <= $3::date
-        AND ($4::uuid IS NULL OR e.branch_id = $4::uuid)
-      GROUP BY DATE_TRUNC('{{GRANULARITY}}', e.expense_date::timestamptz)
-    )
-    SELECT
-      COALESCE(s.period, ea.period)        AS period,
-      COALESCE(s.total_sales,    0)::text  AS total_sales,
-      COALESCE(ea.total_expenses, 0)::text AS total_expenses
-    FROM sales_agg s
-    FULL OUTER JOIN expense_agg ea ON ea.period = s.period
-    ORDER BY period
   `,
 };

@@ -3,11 +3,15 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CashFlowService } from './cash-flow.service';
 import { GetCashFlowDto } from './dto/cash-flow.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
+import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
+import { FINANCE_READ_ROLES } from '@/contexts/finances/finances.roles';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 
 @ApiTags('Finances - Cash Flow')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@RequiredRole(...FINANCE_READ_ROLES)
 @Controller('finances/cash-flow')
 export class CashFlowController {
   constructor(private readonly cashFlowService: CashFlowService) {}

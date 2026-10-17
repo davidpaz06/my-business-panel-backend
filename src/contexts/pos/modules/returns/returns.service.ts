@@ -15,6 +15,8 @@ import {
 import { bulkReturns, posQueries } from '@pos/pos.queries';
 import { FindReturnsDto } from './dto/find_returns.dto';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { AccountingJournalService } from '@/contexts/finances/modules/accounting/accounting-journal.service';
+import Decimal from 'decimal.js';
 
 const { returns } = posQueries;
 
@@ -47,7 +49,47 @@ export class ReturnsService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly tenantScope: TenantScopeService,
+    private readonly journalService: AccountingJournalService,
   ) {}
+
+  /** Saldo que el cliente aun debe de la venta; 0 si no tiene CxC. */
+  private async receivableBalance(saleId: string): Promise<number> {
+    const { rows } = await this.db.query(returns.getReceivableBalance, [
+      saleId,
+    ]);
+    return Number(rows[0]?.balance ?? 0);
+  }
+
+  /**
+   * Neto e IVA de lo devuelto (FNZ-X-04). Si el precio de la linea ya incluye
+   * IVA, el IVA es total * tasa / (100 + tasa); si no, total * tasa / 100.
+   */
+  private async splitReturnedTax(
+    lines: Array<{ sale_item_id: string; total: number }>,
+  ): Promise<{ net: number; tax: number }> {
+    const { rows } = await this.db.query(returns.getLineTaxInfo, [
+      lines.map((l) => l.sale_item_id),
+    ]);
+    const info = new Map<string, { tax_rate: number; includes_iva: boolean }>(
+      rows.map((r: any) => [r.sale_item_id, r]),
+    );
+    let net = new Decimal(0);
+    let tax = new Decimal(0);
+    for (const l of lines) {
+      const i = info.get(l.sale_item_id);
+      const rate = new Decimal(i?.tax_rate ?? 0);
+      const total = new Decimal(l.total);
+      if (i?.includes_iva) {
+        const lineTax = total.mul(rate).div(rate.plus(100));
+        tax = tax.plus(lineTax);
+        net = net.plus(total.minus(lineTax));
+      } else {
+        net = net.plus(total);
+        tax = tax.plus(total.mul(rate).div(100));
+      }
+    }
+    return { net: net.toDecimalPlaces(2).toNumber(), tax: tax.toDecimalPlaces(2).toNumber() };
+  }
 
   /**
    * Contexto de la venta acotado al tenant (scopeTenantId null = superusuario
@@ -188,10 +230,20 @@ export class ReturnsService {
       return acc + lineTotal;
     }, 0);
 
-    await this.db.query('BEGIN');
+    // FNZ-X-04: neto, IVA y CxC se leen antes de insertar la devolucion; el
+    // trigger update_on_return reescribe la venta, la factura y la CxC.
+    const { net, tax } = await this.splitReturnedTax(
+      return_products.map((p) => ({
+        sale_item_id: p.sale_item_id,
+        total: Number((p.total_price ?? p.quantity * p.unit_price).toFixed(2)),
+      })),
+    );
+    const balanceBefore = await this.receivableBalance(sale_id);
+
+    const txn = await this.db.transaction();
     try {
       // 1. Create return_transaction header (server sets return_date)
-      const headerRes = await this.db.query(returns.newTransaction, [
+      const headerRes = await txn.query(returns.newTransaction, [
         ctx.invoice_id,
         tenantCustomerId ?? null,
         Number(totalRefund.toFixed(2)),
@@ -217,16 +269,36 @@ export class ReturnsService {
       }));
 
       const bulk = this.bulkInsertReturns(productRows, returnTransactionId);
-      await this.db.query(bulk.query, bulk.values);
+      await txn.query(bulk.query, bulk.values);
 
-      await this.db.query('COMMIT');
+      // Asiento de la devolucion: secundario (no tumba el reembolso).
+      await this.journalService.trySecondary(
+        txn,
+        `devolucion ${returnTransactionId}`,
+        () =>
+          this.journalService.generateReturnJournal(
+            {
+              tenantId: ctx.tenant_id,
+              returnId: returnTransactionId,
+              currencyId: ctx.currency_code === 'USD' ? 2 : 1,
+              netAmount: net,
+              taxAmount: tax,
+              receivableCredit: Math.min(balanceBefore, net + tax),
+              refundMethodId: refund_method ?? null,
+              entryDate: new Date(),
+            },
+            txn,
+          ),
+      );
+
+      await txn.commit();
       return {
         message: 'Reembolso parcial registrado correctamente',
         return_transaction_id: returnTransactionId,
         total_refund_amount: Number(totalRefund.toFixed(2)),
       };
     } catch (error) {
-      await this.db.query('ROLLBACK');
+      await txn.rollback();
       throw new InternalServerErrorException(
         error instanceof Error ? error.message : 'Error al registrar reembolso',
       );
@@ -251,9 +323,15 @@ export class ReturnsService {
       );
     }
 
-    await this.db.query('BEGIN');
+    // Reembolso completo: se revierte lo que queda facturado (la factura ya
+    // refleja devoluciones parciales previas).
+    const net = Number(ctx.digital_subtotal ?? ctx.subtotal_amount);
+    const tax = Number(ctx.digital_tax ?? ctx.tax_amount);
+    const balanceBefore = await this.receivableBalance(saleId);
+
+    const txn = await this.db.transaction();
     try {
-      const headerRes = await this.db.query(returns.newTransaction, [
+      const headerRes = await txn.query(returns.newTransaction, [
         ctx.invoice_id,
         ctx.tenant_customer_id ?? null,
         Number(ctx.total_amount),
@@ -266,15 +344,35 @@ export class ReturnsService {
       const returnTransactionId: string =
         headerRes.rows[0].return_transaction_id;
 
-      await this.db.query(returns.markSaleRefunded, [saleId]);
+      await txn.query(returns.markSaleRefunded, [saleId]);
 
-      await this.db.query('COMMIT');
+      await this.journalService.trySecondary(
+        txn,
+        `reembolso completo ${returnTransactionId}`,
+        () =>
+          this.journalService.generateReturnJournal(
+            {
+              tenantId: ctx.tenant_id,
+              returnId: returnTransactionId,
+              currencyId: ctx.currency_code === 'USD' ? 2 : 1,
+              netAmount: net,
+              taxAmount: tax,
+              receivableCredit: Math.min(balanceBefore, net + tax),
+              refundMethodId: null,
+              entryDate: new Date(),
+              description: `Reembolso completo de venta - ${saleId}`,
+            },
+            txn,
+          ),
+      );
+
+      await txn.commit();
       return {
         message: 'Reembolso completo registrado',
         return_transaction_id: returnTransactionId,
       };
     } catch (error) {
-      await this.db.query('ROLLBACK');
+      await txn.rollback();
       throw new InternalServerErrorException(
         error instanceof Error
           ? error.message

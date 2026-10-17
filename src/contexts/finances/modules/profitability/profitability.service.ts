@@ -5,6 +5,8 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 import {
   expenseCategoryComponents,
   expenseComponents,
+  notesComponents,
+  payrollComponents,
   returnsComponents,
   salesComponents,
   tenantBranches,
@@ -14,6 +16,8 @@ import {
   BucketUnit,
   ExpenseCategoryComponentRow,
   ExpenseComponentRow,
+  NotesComponentRow,
+  PayrollComponentRow,
   ProfitabilityInterval,
   ProfitabilityRawData,
   ReturnsComponentRow,
@@ -54,7 +58,9 @@ export class ProfitabilityService {
     const bucketParams = [
       session.tenant_id,
       bucketUnit,
-      rangeStart,
+      // ISO en UTC: las columnas timestamp guardan hora UTC; un Date crudo se
+      // serializaria con el offset del proceso (que Postgres ignora).
+      rangeStart.toISOString(),
       branchFilter,
     ];
 
@@ -64,12 +70,16 @@ export class ProfitabilityService {
       returnsResult,
       expensesResult,
       expenseCategoriesResult,
+      payrollResult,
+      notesResult,
     ] = await Promise.all([
       this.db.query(tenantBranches, tenantParams),
       this.db.query(salesComponents, bucketParams),
       this.db.query(returnsComponents, bucketParams),
       this.db.query(expenseComponents, bucketParams),
       this.db.query(expenseCategoryComponents, bucketParams),
+      this.db.query(payrollComponents, bucketParams),
+      this.db.query(notesComponents, bucketParams),
     ]);
 
     return {
@@ -82,6 +92,8 @@ export class ProfitabilityService {
       expenses: expensesResult.rows as ExpenseComponentRow[],
       expense_categories:
         expenseCategoriesResult.rows as ExpenseCategoryComponentRow[],
+      payroll: payrollResult.rows as PayrollComponentRow[],
+      notes: notesResult.rows as NotesComponentRow[],
     };
   }
 }

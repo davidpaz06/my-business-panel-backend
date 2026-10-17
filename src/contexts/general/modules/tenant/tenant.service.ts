@@ -66,6 +66,32 @@ export class TenantService {
     );
   }
 
+  /**
+   * Provisiona la contabilidad del tenant: plan de cuentas (plantilla NIIF
+   * PYMES) y categorias de gasto. Sin plan de cuentas ningun asiento contable
+   * se puede registrar (FNZ-X-04: ningun tenant lo tenia y todas las ventas
+   * quedaban sin asiento ni costo de venta). Ambas son idempotentes.
+   */
+  private async provisionAccountingDefaults(
+    txn: TransactionClient,
+    tenantId: string,
+  ): Promise<void> {
+    await txn.rawQuery(
+      'SELECT accounting_schema.provision_tenant_accounts($1)',
+      [tenantId],
+    );
+    await txn.rawQuery(
+      `INSERT INTO accounting_schema.expense_category (tenant_id, name, account_code, is_fixed)
+       SELECT $1, t.name, t.account_code, t.is_fixed
+       FROM accounting_schema.expense_category_template t
+       WHERE NOT EXISTS (
+         SELECT 1 FROM accounting_schema.expense_category ec
+         WHERE ec.tenant_id = $1 AND ec.name = t.name
+       )`,
+      [tenantId],
+    );
+  }
+
   private async rollbackSafely(
     txn: TransactionClient,
     context: string,
@@ -150,6 +176,7 @@ export class TenantService {
       ]);
 
       await this.provisionHrDefaults(txn, rows[0].tenant_id);
+      await this.provisionAccountingDefaults(txn, rows[0].tenant_id);
 
       await txn.commit();
       committed = true;
@@ -201,6 +228,7 @@ export class TenantService {
       const tenantId: string = newTenant.tenant_id;
 
       await this.provisionHrDefaults(txn, tenantId);
+      await this.provisionAccountingDefaults(txn, tenantId);
 
       // ── 2. Crear sucursal principal ───────────────────────────────────────
       const branchName =

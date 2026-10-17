@@ -8,43 +8,35 @@ Workspace context (sibling repos, cross-repo feature order, branching) lives in 
 
 ## Stack
 
-NestJS 11 + TypeScript 5.7 + Express + PostgreSQL + Redis (BullMQ queues) + JWT cookie auth + class-validator DTOs + Swagger. Stripe for subscriptions. E-invoicing (xml-crypto, node-forge, xmlbuilder2) — implementado hoy para Hacienda Costa Rica; el mecanismo de facturacion electronica de Venezuela (SENIAT) puede diferir (revisar antes de reusar este stack tal cual). Decimal.js for money — never use native `number` for amounts.
+NestJS 11 + TypeScript 5.7 + Express + PostgreSQL + JWT cookie auth + class-validator DTOs + Swagger. Stripe for subscriptions. E-invoicing (xml-crypto, node-forge, xmlbuilder2) — implementado hoy para Hacienda Costa Rica; el mecanismo de facturacion electronica de Venezuela (SENIAT) puede diferir (revisar antes de reusar este stack tal cual). Decimal.js for money — never use native `number` for amounts.
 
 ## Commands
 
 ```bash
-npm run start:dev          # watch mode
-npm run start:debug        # --inspect
-npm run start:prod         # node dist/main (run npm run build first)
-npm run start:staging      # NODE_ENV=staging
-npm run build              # nest build
-npm run lint               # eslint --fix on {src,apps,libs,test}/**/*.ts
-npm run test               # jest (unit, *.spec.ts under src/)
-npm run test:watch
-npm run test:cov
-npm run test:debug         # node --inspect-brk + ts-node
-npm run test:e2e           # jest --config ./test/jest-e2e.json
-npm run test -- path/to/file.spec.ts        # single file
-npm run test -- -t "describe or it name"    # single named test
+pnpm start:dev          # watch mode
+pnpm start:debug        # --inspect
+pnpm start:prod         # node dist/main (run pnpm build first)
+pnpm start:staging      # NODE_ENV=staging
+pnpm build              # nest build
+pnpm lint               # eslint --fix on {src,apps,libs,test}/**/*.ts
+pnpm test               # jest (unit, *.spec.ts under src/)
+pnpm test:watch
+pnpm test:cov
+pnpm test:debug         # node --inspect-brk + ts-node
+pnpm test:e2e           # jest --config ./test/jest-e2e.json
+pnpm test path/to/file.spec.ts        # single file
+pnpm test -t "describe or it name"    # single named test
 
 # CABYS catalog loaders (Costa Rica product tax codes — legado, pendiente de reemplazo por catalogo fiscal Venezuela)
-npm run cabys:load                 # uses .env
-npm run cabys:load:staging         # uses .env.staging
-npm run cabys:load:dev             # uses .env.development
-npm run cabys:load:native          # ts-node native loader
+pnpm cabys:load                 # uses .env
+pnpm cabys:load:staging         # uses .env.staging
+pnpm cabys:load:dev             # uses .env.development
+pnpm cabys:load:native          # ts-node native loader
 
-npm run deploy:local               # build + cabys:load + start:prod
+pnpm deploy:local               # build + cabys:load + start:prod
 ```
 
-Docker (Postgres + pgAdmin :8080 + Redis + RedisInsight :5540) lives here:
-
-```bash
-docker compose -f docker-compose.dev.yml up -d
-docker compose -f docker-compose.prod.yml up -d
-docker logs my-business-panel-postgres | grep -E "(ERROR|Bootstrap completado|ready to accept)"
-```
-
-DB schema auto-bootstraps from `../my-business-panel-database/bootstrap.sql` on first container start. To reset: `docker compose down`, delete `./postgres-data`, `up -d` again.
+Local DB: native PostgreSQL on `localhost:5432` (see `DB_CONNECTION` in `.env.development`). No Docker. Staging runs on Render with Supabase; production on RDS. Schema source is `../my-business-panel-database/bootstrap.sql`.
 
 ## Boot / global setup (`src/main.ts`)
 
@@ -127,7 +119,6 @@ The repo uses raw SQL via `@crane-technologies/database` (no ORM). Each context 
 
 ## Async / scheduling
 
-- BullMQ via `@nestjs/bullmq` + `ioredis` for background queues.
 - `@nestjs/schedule` for cron jobs.
 - E-invoice cron probe script: `scripts/test-einvoice-cron.ts`.
 
@@ -143,11 +134,11 @@ Throw domain errors from `src/common/errors/` (or the context's `errors/`) — t
 
 ## Tests
 
-Jest. Unit specs live next to source as `*.spec.ts` (`testRegex: '.*\\.spec\\.ts$'`, `rootDir: src`). E2E specs under `test/` with `test/jest-e2e.json`. Run a single file with `npm run test -- path/to/file.spec.ts`; a single named test with `-t "name"`.
+Jest. Unit specs live next to source as `*.spec.ts` (`testRegex: '.*\\.spec\\.ts$'`, `rootDir: src`). E2E specs under `test/` with `test/jest-e2e.json`. Run a single file with `pnpm test path/to/file.spec.ts`; a single named test with `-t "name"`.
 
 ## Lint / style
 
-- `npm run lint` runs `eslint --fix`. Prettier integrated via `eslint-plugin-prettier`.
+- `pnpm lint` runs `eslint --fix`. Prettier integrated via `eslint-plugin-prettier`.
 - No emojis in code, comments, log strings, or commit messages.
 - Spanish copy in domain text / error messages is intentional — keep it.
 

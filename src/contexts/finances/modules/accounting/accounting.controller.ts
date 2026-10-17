@@ -16,6 +16,12 @@ import {
 } from './dto/cost-center.dto';
 import { CreateJournalEntryDto } from './dto/journal-entry.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
+import { RoleAuthorizationGuard } from '@/common/guards/role_authorization.guard';
+import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
+import {
+  FINANCE_READ_ROLES,
+  FINANCE_ADMIN_ROLES,
+} from '@/contexts/finances/finances.roles';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import {
@@ -38,7 +44,8 @@ import {
 } from '@/docs/contexts/finances/accounting';
 
 @ApiTags('Accounting')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@RequiredRole(...FINANCE_READ_ROLES)
 @Controller('accounting')
 export class AccountingController {
   constructor(private readonly accountingService: AccountingService) {}
@@ -96,6 +103,7 @@ export class AccountingController {
   @ApiResponse(createAccountDoc.responses[201])
   @ApiResponse(createAccountDoc.responses[400])
   @ApiResponse(createAccountDoc.responses[401])
+  @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('accounts')
   createAccount(
     @Body() dto: CreateAccountDto,
@@ -109,6 +117,7 @@ export class AccountingController {
   @ApiResponse(updateAccountDoc.responses[400])
   @ApiResponse(updateAccountDoc.responses[401])
   @ApiResponse(updateAccountDoc.responses[404])
+  @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Patch('accounts/:id')
   updateAccount(
     @Param('id') id: string,
@@ -121,6 +130,7 @@ export class AccountingController {
   @ApiOperation(provisionAccountsDoc.operation)
   @ApiResponse(provisionAccountsDoc.responses[201])
   @ApiResponse(provisionAccountsDoc.responses[401])
+  @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('accounts/provision')
   provisionAccounts(@Session() session: IUserSession) {
     return this.accountingService.provisionTenantAccounts(session.tenant_id);
@@ -151,6 +161,7 @@ export class AccountingController {
   @ApiResponse(createCostCenterDoc.responses[201])
   @ApiResponse(createCostCenterDoc.responses[400])
   @ApiResponse(createCostCenterDoc.responses[401])
+  @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('cost-centers')
   createCostCenter(
     @Body() dto: CreateCostCenterDto,
@@ -164,6 +175,7 @@ export class AccountingController {
   @ApiResponse(updateCostCenterDoc.responses[400])
   @ApiResponse(updateCostCenterDoc.responses[401])
   @ApiResponse(updateCostCenterDoc.responses[404])
+  @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Patch('cost-centers/:id')
   updateCostCenter(
     @Param('id') id: string,
@@ -201,6 +213,7 @@ export class AccountingController {
   @ApiResponse(createJournalEntryDoc.responses[201])
   @ApiResponse(createJournalEntryDoc.responses[400])
   @ApiResponse(createJournalEntryDoc.responses[401])
+  @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('journal-entries')
   createJournalEntry(
     @Body() dto: CreateJournalEntryDto,
@@ -217,6 +230,7 @@ export class AccountingController {
   @ApiResponse(voidJournalEntryDoc.responses[201])
   @ApiResponse(voidJournalEntryDoc.responses[401])
   @ApiResponse(voidJournalEntryDoc.responses[404])
+  @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('journal-entries/:id/void')
   voidJournalEntry(@Param('id') id: string, @Session() session: IUserSession) {
     return this.accountingService.voidJournalEntry(

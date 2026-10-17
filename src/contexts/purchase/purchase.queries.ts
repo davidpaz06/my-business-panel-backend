@@ -673,6 +673,8 @@ export const purchaseQueryDefs = {
     getPaymentAmountForJournal: `
       SELECT
         pop.amount_paid,
+        pop.currency_id,
+        pop.payment_method_id,
         b.tenant_id,
         po.purchase_order_id
       FROM purchase_schema.purchase_order_payment pop

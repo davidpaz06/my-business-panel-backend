@@ -90,6 +90,14 @@ export const accountsReceivableQueries = {
   },
 
   collections: {
+    // Moneda de la CxC (la de la venta): amount_paid esta en esa moneda.
+    getReceivableCurrency: `
+      SELECT COALESCE(s.currency_id, 1) AS currency_id
+      FROM pos_schema.sale_account_receivable sar
+      JOIN pos_schema.sale s ON s.sale_id = sar.sale_id
+      WHERE sar.sale_account_receivable_id = $1
+    `,
+
     insertCollection: `
       INSERT INTO pos_schema.sale_collection
         (sale_account_receivable_id, amount_paid, payment_method_id, currency_id,
@@ -214,6 +222,24 @@ export const accountsReceivableQueries = {
   },
 
   apartado: {
+    // Montos de la venta para el asiento al completar un apartado (FNZ-X-04).
+    getSaleForJournal: `
+      SELECT
+        s.sale_id,
+        s.sale_date,
+        s.currency_id,
+        s.subtotal_amount,
+        s.tax_amount,
+        s.total_amount,
+        COALESCE((
+          SELECT SUM(COALESCE(si.cost_price_at_sale, 0) * si.quantity)
+          FROM pos_schema.sale_item si
+          WHERE si.sale_id = s.sale_id
+        ), 0) AS total_cost
+      FROM pos_schema.sale s
+      WHERE s.sale_id = $1
+    `,
+
     getARTypeAndSaleInfo: `
       SELECT
         art.type_name,
@@ -222,6 +248,7 @@ export const accountsReceivableQueries = {
         ar.tenant_id,
         ar.tenant_customer_id,
         s.branch_id,
+        s.currency_id,
         (ar.subtotal + COALESCE(sar.tax_amount, 0)) AS total_amount
       FROM pos_schema.sale_account_receivable sar
       JOIN general_schema.account_receivable ar

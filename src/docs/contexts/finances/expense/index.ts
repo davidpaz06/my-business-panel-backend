@@ -11,7 +11,3 @@ export { createExpenseDoc } from './create-expense.doc';
 export { getFiscalPeriodsDoc } from './get-fiscal-periods.doc';
 export { createFiscalPeriodDoc } from './create-fiscal-period.doc';
 export { closeFiscalPeriodDoc } from './close-fiscal-period.doc';
-export { getFixedVsVariableDoc } from './get-fixed-vs-variable.doc';
-export { getFixedBreakdownDoc } from './get-fixed-breakdown.doc';
-export { getVariableBreakdownDoc } from './get-variable-breakdown.doc';
-export { getSalesVsExpensesDoc } from './get-sales-vs-expenses.doc';

@@ -15,12 +15,7 @@ import {
 } from './accounts.queries';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 
-interface AccountListQuery {
-  status?: string;
-  sort_by?: string;
-  sort_dir?: string;
-  branch_id?: string;
-}
+import { AccountListQueryDto } from './dto/accounts-query.dto';
 
 // role_hierarchy 1 es employee; el superusuario se identifica por nombre de rol
 const SUPERUSER_ROLE_NAME = 'superuser';
@@ -42,6 +37,10 @@ const AR_SORT_COLS: Record<string, string> = {
   balance_due: 'balance_due',
 };
 
+// Todas las vistas de Cuentas filtran SIEMPRE por un tenant (el de la sesion,
+// o el que el superusuario pida explicitamente, ver el controller): mezclar
+// CxP/CxC de varias empresas en una tabla y aplicarles la configuracion de
+// alertas de otro tenant no tiene sentido de negocio.
 @Injectable()
 export class AccountsService {
   constructor(
@@ -49,21 +48,13 @@ export class AccountsService {
     private readonly stateService: StateService,
   ) {}
 
-  async getAccountsOverview(session: IUserSession, branchId?: string) {
-    const isSuperuser =
-      this.stateService.getRole(session.role_id).role_name ===
-      SUPERUSER_ROLE_NAME;
-
+  async getAccountsOverview(tenantId: string, branchId?: string) {
     const { alertConfig } = accountsOverviewQueries;
     const branch = branchId || null;
 
-    // CxP: filtro multi-tenant (salvo superuser) + sucursal opcional (via warehouse->branch).
-    const apValues: unknown[] = [];
-    const apConditions: string[] = ['ap.is_paid = false'];
-    if (!isSuperuser) {
-      apValues.push(session.tenant_id);
-      apConditions.push(`b.tenant_id = $${apValues.length}`);
-    }
+    // CxP: tenant + sucursal opcional (via warehouse->branch).
+    const apValues: unknown[] = [tenantId];
+    const apConditions: string[] = ['ap.is_paid = false', 'b.tenant_id = $1'];
     if (branch) {
       apValues.push(branch);
       apConditions.push(`b.branch_id = $${apValues.length}`);
@@ -74,13 +65,9 @@ export class AccountsService {
       ORDER BY ap.due_date DESC, pap.created_at DESC
     `;
 
-    // CxC: filtro multi-tenant (salvo superuser) + sucursal opcional (via sale.branch_id).
-    const arValues: unknown[] = [];
-    const arConditions: string[] = ['ar.is_paid = false'];
-    if (!isSuperuser) {
-      arValues.push(session.tenant_id);
-      arConditions.push(`ar.tenant_id = $${arValues.length}`);
-    }
+    // CxC: tenant + sucursal opcional (via sale.branch_id).
+    const arValues: unknown[] = [tenantId];
+    const arConditions: string[] = ['ar.is_paid = false', 'ar.tenant_id = $1'];
     if (branch) {
       arValues.push(branch);
       arConditions.push(`sale_b.branch_id = $${arValues.length}`);
@@ -96,16 +83,12 @@ export class AccountsService {
       await Promise.all([
         this.db.query(apSql, apValues),
         this.db.query(arSql, arValues),
-        session.tenant_id
-          ? this.db
-              .query(alertConfig.getPayableConfig, [session.tenant_id])
-              .catch(() => ({ rows: [] }))
-          : Promise.resolve({ rows: [] }),
-        session.tenant_id
-          ? this.db
-              .query(alertConfig.getReceivableConfig, [session.tenant_id])
-              .catch(() => ({ rows: [] }))
-          : Promise.resolve({ rows: [] }),
+        this.db
+          .query(alertConfig.getPayableConfig, [tenantId])
+          .catch(() => ({ rows: [] })),
+        this.db
+          .query(alertConfig.getReceivableConfig, [tenantId])
+          .catch(() => ({ rows: [] })),
       ]);
 
     const payablesAlertConfig: AlertConfig | null =
@@ -121,26 +104,17 @@ export class AccountsService {
     };
   }
 
-  async getPayablesList(query: AccountListQuery, session: IUserSession) {
-    const isSuperuser =
-      this.stateService.getRole(session.role_id).role_name ===
-      SUPERUSER_ROLE_NAME;
+  async getPayablesList(query: AccountListQueryDto, tenantId: string) {
+    const values: unknown[] = [tenantId];
+    const conditions: string[] = ['ap.is_paid = false', 'b.tenant_id = $1'];
 
-    const values: unknown[] = [];
-    const conditions: string[] = ['ap.is_paid = false'];
-
-    if (!isSuperuser) {
-      values.push(session.tenant_id);
-      conditions.push(`b.tenant_id = $${values.length}`);
-    }
-
-    if (query.status && /^\d+$/.test(query.status)) {
+    if (query.status) {
       values.push(parseInt(query.status, 10));
       conditions.push(`pap.account_payable_status = $${values.length}`);
     }
 
-    if (query.branch_id) {
-      values.push(query.branch_id);
+    if (query.branchId) {
+      values.push(query.branchId);
       conditions.push(`b.branch_id = $${values.length}`);
     }
 
@@ -158,26 +132,17 @@ export class AccountsService {
     return result.rows;
   }
 
-  async getReceivablesList(query: AccountListQuery, session: IUserSession) {
-    const isSuperuser =
-      this.stateService.getRole(session.role_id).role_name ===
-      SUPERUSER_ROLE_NAME;
+  async getReceivablesList(query: AccountListQueryDto, tenantId: string) {
+    const values: unknown[] = [tenantId];
+    const conditions: string[] = ['ar.is_paid = false', 'ar.tenant_id = $1'];
 
-    const values: unknown[] = [];
-    const conditions: string[] = ['ar.is_paid = false'];
-
-    if (!isSuperuser) {
-      values.push(session.tenant_id);
-      conditions.push(`ar.tenant_id = $${values.length}`);
-    }
-
-    if (query.status && /^\d+$/.test(query.status)) {
+    if (query.status) {
       values.push(parseInt(query.status, 10));
       conditions.push(`sar.account_receivable_status = $${values.length}`);
     }
 
-    if (query.branch_id) {
-      values.push(query.branch_id);
+    if (query.branchId) {
+      values.push(query.branchId);
       conditions.push(`sale_b.branch_id = $${values.length}`);
     }
 

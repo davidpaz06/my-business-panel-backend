@@ -30,7 +30,12 @@ describe('CxC y alertas de cobro - quien es superusuario', () => {
   const tenantScope = new TenantScopeService(db, {
     getRole: (id: number) => roles[id],
   } as any);
-  const receivables = new AccountsReceivableService(db, tenantScope, {} as any);
+  const receivables = new AccountsReceivableService(
+    db,
+    tenantScope,
+    {} as any,
+    {} as any,
+  );
   const alerts = new CollectionAlertsService(db, tenantScope);
 
   beforeEach(() => {

@@ -15,9 +15,11 @@ import { accountsReceivableQueries } from './accounts-receivable.queries';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { posQueries } from '@pos/pos.queries';
+import { calculateEarnedPoints } from '../loyal-program/loyalty-currency';
+import { AccountingJournalService } from '@/contexts/finances/modules/accounting/accounting-journal.service';
 
 const { ar, collections, catalog, apartado } = accountsReceivableQueries;
-const { loyaltyScore } = posQueries;
+const { loyaltyScore, saleItems } = posQueries;
 
 @Injectable()
 export class AccountsReceivableService {
@@ -27,6 +29,7 @@ export class AccountsReceivableService {
     @Inject(DATABASE) private readonly db: Database,
     private readonly tenantScope: TenantScopeService,
     private readonly warehouseService: WarehouseService,
+    private readonly journalService: AccountingJournalService,
   ) {}
 
   async getAccountsReceivable(session: IUserSession, page = 1, limit = 50) {
@@ -122,6 +125,48 @@ export class AccountsReceivableService {
         );
       }
 
+      // Asiento del cobro (FNZ-X-04): Caja/Bancos contra Cuentas por Cobrar.
+      // Secundario (no tumba el cobro) y en savepoint dentro de la txn.
+      const cobroId = collectionId;
+      await this.journalService.trySecondary(
+        txn,
+        `cobro ${cobroId}`,
+        async () => {
+          const { rows: curRows } = await txn.query(
+            collections.getReceivableCurrency,
+            [dto.sale_account_receivable_id],
+          );
+          const currencyId = Number(curRows[0]?.currency_id ?? 1);
+          const entryDate = new Date();
+          const settlement = await this.journalService.buildSettlement(
+            access.tenant_id,
+            currencyId,
+            entryDate,
+            [
+              {
+                payment_method_id: Number(dto.payment_method_id),
+                payment_amount: Number(dto.amount_paid),
+                currency_id: currencyId,
+              },
+            ],
+            0,
+            txn,
+          );
+          await this.journalService.generatePaymentReceivedJournal(
+            {
+              tenantId: access.tenant_id,
+              sourceId: cobroId,
+              amount: Number(dto.amount_paid),
+              settlement,
+              currencyId,
+              entryDate,
+              description: `Cobro de cuenta por cobrar - venta ${access.sale_id}`,
+            },
+            txn,
+          );
+        },
+      );
+
       // Recalc AR totals + status defensively. The DB has a trigger that does
       // the same, but bootstrap.sql in some environments lacks it.
       await txn.query(collections.recalcReceivableTotals, [
@@ -150,6 +195,7 @@ export class AccountsReceivableService {
           tenant_id: string;
           tenant_customer_id: string | null;
           branch_id: string;
+          currency_id: number | null;
           total_amount: string | number;
         }
       | undefined;
@@ -159,8 +205,11 @@ export class AccountsReceivableService {
         await this.grantProportionalLoyaltyPoints(
           arRow.tenant_id,
           arRow.tenant_customer_id,
+          arRow.currency_id,
           Number(arRow.total_amount),
           Number(dto.amount_paid),
+          arRow.sale_id,
+          collectionId,
         );
       } catch (loyaltyError) {
         this.logger.error(
@@ -196,8 +245,11 @@ export class AccountsReceivableService {
   private async grantProportionalLoyaltyPoints(
     tenantId: string,
     tenantCustomerId: string | null,
+    saleCurrencyId: number | null,
     saleTotal: number,
     paidAmount: number,
+    saleId: string,
+    collectionId: string,
   ): Promise<void> {
     if (!tenantCustomerId || paidAmount <= 0) return;
 
@@ -207,10 +259,17 @@ export class AccountsReceivableService {
     );
     const program = programRows[0];
     if (!program) return;
-    if (saleTotal < Number(program.minimum_purchase_for_points)) return;
 
-    const points = Math.floor(
-      paidAmount * Number(program.points_earned_per_currency_unit),
+    // FNZ-FI-01: el programa se define en USD; el total de la venta y el
+    // cobro (ambos en la moneda de la venta) se convierten antes de aplicar
+    // la compra minima y la tasa de acumulacion.
+    const points = await calculateEarnedPoints(
+      this.db,
+      program,
+      tenantId,
+      saleCurrencyId,
+      saleTotal,
+      paidAmount,
     );
     if (points <= 0) return;
 
@@ -218,6 +277,14 @@ export class AccountsReceivableService {
       tenantId,
       tenantCustomerId,
       points,
+    ]);
+    // FNZ-FI-03: queda en el ledger para el grafico de crecimiento de Finanzas.
+    await this.db.query(loyaltyScore.insertCollectionEarned, [
+      tenantId,
+      tenantCustomerId,
+      points,
+      saleId,
+      collectionId,
     ]);
   }
 
@@ -255,6 +322,45 @@ export class AccountsReceivableService {
           txn,
         );
         await txn.query(apartado.completeSale, [saleId]);
+        // Apartados creados antes de FNZ-RT-02 quedaron sin costo de venta.
+        await txn.query(saleItems.fixCostAtSale, [saleId]);
+
+        // Asiento de la venta al entregarse el apartado (FNZ-X-04): todo el
+        // total contra Cuentas por Cobrar, que los abonos ya fueron
+        // acreditando; mas el costo de venta.
+        await this.journalService.trySecondary(
+          txn,
+          `apartado ${saleId}`,
+          async () => {
+            const { rows } = await txn.query(apartado.getSaleForJournal, [
+              saleId,
+            ]);
+            const sale = rows[0];
+            if (!sale) return;
+            const entryDate = new Date();
+            await this.journalService.generateSaleJournal(
+              {
+                tenantId,
+                saleId,
+                saleCondition: '04',
+                subtotalAmount: Number(sale.subtotal_amount),
+                taxAmount: Number(sale.tax_amount),
+                totalAmount: Number(sale.total_amount),
+                settlement: { cash: 0, bank: 0, points: 0 },
+                currencyId: Number(sale.currency_id ?? 1),
+                entryDate,
+              },
+              txn,
+            );
+            const totalCost = Number(sale.total_cost);
+            if (totalCost > 0) {
+              await this.journalService.generateSaleCogsJournal(
+                { tenantId, saleId, totalCost, entryDate },
+                txn,
+              );
+            }
+          },
+        );
         await txn.commit();
       } catch (err) {
         await txn.rollback();
