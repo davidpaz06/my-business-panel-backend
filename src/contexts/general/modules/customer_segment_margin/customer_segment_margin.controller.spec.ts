@@ -1,16 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CustomerSegmentTypeController } from './customer_segment_margin.controller';
+import { CustomerSegmentMarginController } from './customer_segment_margin.controller';
 
-describe('CustomerSegmentTypeController', () => {
-  let controller: CustomerSegmentTypeController;
+describe('CustomerSegmentMarginController', () => {
+  let controller: CustomerSegmentMarginController;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [CustomerSegmentTypeController],
-    }).compile();
+      controllers: [CustomerSegmentMarginController],
+    })
+      // Los constructores inyectan DATABASE, Stripe, guards y otros servicios;
+      // la prueba solo verifica que el provider se instancia.
+      .useMocker(() => ({}))
+      .compile();
 
-    controller = module.get<CustomerSegmentTypeController>(
-      CustomerSegmentTypeController,
+    controller = module.get<CustomerSegmentMarginController>(
+      CustomerSegmentMarginController,
     );
   });
 
