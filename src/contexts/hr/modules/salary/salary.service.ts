@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import Decimal from 'decimal.js';
 import { hrQueries } from '@hr/hr.queries';
 import { SalaryHistoryService } from './salary-history.service';

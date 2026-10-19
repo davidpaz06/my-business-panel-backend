@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { ClockInDto } from './dto/clockIn.dto';
 import { ManualClockInDto, ManualClockOutDto } from './dto/manual-clocking.dto';
 import { EmployeeService } from '../employee/employee.service';

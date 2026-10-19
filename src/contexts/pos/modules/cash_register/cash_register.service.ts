@@ -1,6 +1,6 @@
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { posQueries } from '@pos/pos.queries';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { CreateCashRegisterDto } from '@/contexts/pos/modules/cash_register/dto/create_cash_register.dto';

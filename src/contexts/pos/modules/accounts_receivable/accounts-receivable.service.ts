@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import Database from '@crane-technologies/database/dist/components/Database';
+import Database from '@resonance-components/datahandler';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import { WarehouseService } from '@/contexts/inventory/modules/warehouse/warehouse.service';

@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { generalQueries } from '@general/general.queries';
 import { SetBaseRateDto } from './dto/set-base-rate.dto';

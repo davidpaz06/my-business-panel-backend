@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database/dist/components/Database';
+import Database from '@resonance-components/datahandler';
 import { posRoyaltyQueries } from './pos-royalty.queries';
 import type {
   CreateRoyaltyRuleDto,

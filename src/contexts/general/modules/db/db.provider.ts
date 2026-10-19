@@ -1,4 +1,4 @@
-import Database, { DatabaseConfig } from '@crane-technologies/database';
+import Database, { DatabaseConfig } from '@resonance-components/datahandler';
 import { types as pgTypes } from 'pg';
 import { queries } from '@/queries';
 import { ConfigService } from '@nestjs/config';

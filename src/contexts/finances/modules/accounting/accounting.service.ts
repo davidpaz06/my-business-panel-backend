@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DATABASE } from '../../../general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { accountingQueries } from './accounting.queries';
 import { CreateAccountDto, UpdateAccountDto } from './dto/create-account.dto';
 import {

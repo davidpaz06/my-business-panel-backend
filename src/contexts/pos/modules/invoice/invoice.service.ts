@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { Invoice, InvoiceDB, FullInvoice } from './interface/invoice.interface';
 import { posQueries } from '@pos/pos.queries';
 import { InvalidInvoice } from '@/common/errors/invalid_bill.error';

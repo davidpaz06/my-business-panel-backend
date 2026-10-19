@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserService } from '@/contexts/general/modules/user/user.service';
 import { StateService } from '@/contexts/general/modules/state/state.service';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { compare, hash } from 'bcrypt';
 import { generalQueries } from '@general/general.queries';
 

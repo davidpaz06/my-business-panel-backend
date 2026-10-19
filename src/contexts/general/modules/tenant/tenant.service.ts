@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import Stripe from 'stripe';
 import { hash } from 'bcrypt';
 import { randomUUID } from 'crypto';

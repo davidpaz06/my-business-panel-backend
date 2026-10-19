@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { posExpenseQueries } from './pos-expense.queries';
 import { CreateExpenseDto, CreateExpenseTypeDto } from './dto/pos-expense.dto';
 import { IUserSession } from '@/common/interfaces/user_session.interface';

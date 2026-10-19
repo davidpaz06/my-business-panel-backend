@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@crane-technologies/database':
-        specifier: ^3.0.2
-        version: 3.3.1
       '@nestjs/common':
         specifier: ^11.0.1
         version: 11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -35,6 +32,9 @@ importers:
       '@nestjs/swagger':
         specifier: ^11.2.6
         version: 11.4.7(@nestjs/common@11.2.7(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.7)(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)
+      '@resonance-components/datahandler':
+        specifier: ^1.0.0
+        version: 1.0.0
       bcrypt:
         specifier: ^6.0.0
         version: 6.0.0
@@ -849,10 +849,6 @@ packages:
     resolution: {integrity: sha512-oWxJza7CpWR8/FeWYfE6j+jgncnGBsTWnZLt5rD2GUpsGSQTuGrsFPnmbbaVLgRS5QIVWBJYke7QFBr/7qVMWg==}
     engines: {node: '>= 10.0.0'}
 
-  '@crane-technologies/database@3.3.1':
-    resolution: {integrity: sha512-w3d/MzOYdpEECa0fH55vtZmo/YYXCZp1HW8Zj/RhuZEIOWVWdv11jHV0lOJKAIjFnEDMNH5/3v5V82E2UeViXw==}
-    engines: {node: '>=18.0.0'}
-
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
@@ -1470,6 +1466,10 @@ packages:
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
+
+  '@resonance-components/datahandler@1.0.0':
+    resolution: {integrity: sha512-/gl+LQKTyYcNctxK/oinC7i414IAw9fgfFv/JoSnWOOv2F3YUZ7in9LjsGxSPlcU03ug9xrWWtkpHDHmWna2Xw==}
+    engines: {node: '>=18.0.0'}
 
   '@scarf/scarf@1.4.0':
     resolution: {integrity: sha512-xxeapPiUXdZAE3che6f3xogoJPeZgig6omHEy1rIY5WVsB3H2BHNnZH+gHG6x91SCWyQCzWGsuL2Hh3ClO5/qQ==}
@@ -6307,13 +6307,6 @@ snapshots:
       dot: 2.0.0-beta.1
       fs-extra: 11.4.1
 
-  '@crane-technologies/database@3.3.1':
-    dependencies:
-      pg: 8.23.1
-      pg-copy-streams: 7.0.0
-    transitivePeerDependencies:
-      - pg-native
-
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
@@ -7017,6 +7010,13 @@ snapshots:
   '@polka/url@0.5.0': {}
 
   '@polka/url@1.0.0-next.29': {}
+
+  '@resonance-components/datahandler@1.0.0':
+    dependencies:
+      pg: 8.23.1
+      pg-copy-streams: 7.0.0
+    transitivePeerDependencies:
+      - pg-native
 
   '@scarf/scarf@1.4.0': {}
 

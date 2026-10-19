@@ -14,7 +14,7 @@ import { UpdateSupplierInvoiceDto } from './dto/update-supplier-invoice.dto';
 import { UpdateGoodsReceiptDto } from './dto/update-goods-receipt.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
-import Database from '@crane-technologies/database/dist/components/Database';
+import Database from '@resonance-components/datahandler';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { purchaseQueries } from '@purchase/purchase.queries';
 import { WarehouseService } from '@/contexts/inventory/modules/warehouse/warehouse.service';

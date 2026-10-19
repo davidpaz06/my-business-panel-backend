@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { IdentificationType } from './interface/identification-type.interface';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { generalQueries } from '@general/general.queries';
 
 const { identificationType } = generalQueries;

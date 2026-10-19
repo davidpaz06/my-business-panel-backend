@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DATABASE } from '../db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import Stripe from 'stripe';
 import { randomUUID } from 'crypto';
 import { NewSubscriptionDto } from './dto/newSubscription.dto';

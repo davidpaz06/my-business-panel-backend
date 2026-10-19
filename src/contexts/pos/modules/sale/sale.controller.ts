@@ -13,7 +13,7 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { SaleService } from './sale.service';
 import { FullSaleDto } from './dto/sales.dto';
 import { DATABASE } from '../../../general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import {
   Paginate,
   PaginatedResult,

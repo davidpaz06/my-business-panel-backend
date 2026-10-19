@@ -1,5 +1,5 @@
 import { rateAt, toUsd, toVes } from '@/contexts/finances/finances.fx';
-import { createQueries } from '@crane-technologies/database';
+import { createQueries } from '@resonance-components/datahandler';
 
 export const posQueryDefs = {
   sales: {

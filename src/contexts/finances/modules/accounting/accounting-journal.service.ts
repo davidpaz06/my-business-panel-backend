@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DATABASE } from '../../../general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
-import { ITransaction } from '@crane-technologies/database/dist/interfaces/ITransaction';
+import Database from '@resonance-components/datahandler';
+import type { ITransaction } from '@/common/database/transaction.type';
 import { accountingQueries } from './accounting.queries';
 import {
   SaleJournalParams,

@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { paginate } from '../utilities/paginator';
 export type { PaginationResult } from '../utilities/paginator';
 

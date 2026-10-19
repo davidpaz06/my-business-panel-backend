@@ -1,3 +1,3 @@
-import { createQueries } from '@crane-technologies/database';
+import { createQueries } from '@resonance-components/datahandler';
 
 export const movementQueries = createQueries({});

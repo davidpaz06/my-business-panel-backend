@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create_user.dto';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { IUserResult } from '@/contexts/general/modules/user/interfaces/user_result.interface';
 import { generalQueries } from '@general/general.queries';

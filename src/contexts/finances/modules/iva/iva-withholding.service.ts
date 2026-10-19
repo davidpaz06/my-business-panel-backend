@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { DATABASE } from '../../../general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { AccountingJournalService } from '../accounting/accounting-journal.service';
 import { ivaWithholdingQueries } from './iva-withholding.queries';
 

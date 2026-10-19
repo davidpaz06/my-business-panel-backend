@@ -11,7 +11,7 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { StateService } from '@/contexts/general/modules/state/state.service';
 import { InvalidSessionError } from '@/common/errors/invalid_session.error';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { generalQueries } from '@general/general.queries';
 
 const { users } = generalQueries;

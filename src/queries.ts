@@ -1,5 +1,5 @@
 // src/queries.ts
-import { createQueries } from '@crane-technologies/database';
+import { createQueries } from '@resonance-components/datahandler';
 import { hrQueryDefs } from '@/contexts/hr/hr.queries';
 import { purchaseQueryDefs } from '@/contexts/purchase/purchase.queries';
 import { posQueryDefs } from '@/contexts/pos/pos.queries';

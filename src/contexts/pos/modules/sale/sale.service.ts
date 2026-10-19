@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { DATABASE } from '../../../general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { FullSaleDto, NewSingleSaleDto } from './dto/sales.dto';
 import { posQueries } from '@pos/pos.queries';
 

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
-import Database from '@crane-technologies/database/dist/components/Database';
+import Database from '@resonance-components/datahandler';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { purchaseQueries } from '@purchase/purchase.queries';
 import { IUserSession } from '@/common/interfaces/user_session.interface';

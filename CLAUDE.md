@@ -111,7 +111,7 @@ Every domain row is scoped by `tenant_id`. Pull it from `@Session() user` and pa
 
 ## Data access
 
-The repo uses raw SQL via `@crane-technologies/database` (no ORM). Each context has a `<context>.queries.ts` file holding query strings. Services compose queries + run them through the shared DB client. When adding a query:
+The repo uses raw SQL via `@resonance-components/datahandler` (no ORM). Each context has a `<context>.queries.ts` file holding query strings. Services compose queries + run them through the shared DB client. When adding a query:
 
 - Place the SQL string in the matching `*.queries.ts` (not inline in the service).
 - Always parameterize (`$1`, `$2`, …) — never string-interpolate user input.

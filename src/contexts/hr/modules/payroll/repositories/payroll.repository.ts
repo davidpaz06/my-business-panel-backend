@@ -1,5 +1,5 @@
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   ActiveDeductionRow,

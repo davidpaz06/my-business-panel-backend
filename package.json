@@ -20,7 +20,6 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@crane-technologies/database": "^3.0.2",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -29,6 +28,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/schedule": "6.1.1",
     "@nestjs/swagger": "^11.2.6",
+    "@resonance-components/datahandler": "^1.0.0",
     "bcrypt": "^6.0.0",
     "body-parser": "2.2.1",
     "class-transformer": "^0.5.1",

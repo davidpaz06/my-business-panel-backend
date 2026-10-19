@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import Database from '@crane-technologies/database/dist/components/Database';
+import Database from '@resonance-components/datahandler';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import {

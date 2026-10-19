@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DATABASE } from '../../../general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { ivaQueries } from './iva.queries';
 import type {
   IvaSummaryResponse,

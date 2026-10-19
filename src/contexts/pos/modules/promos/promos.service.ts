@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
-import type { ITransaction } from '@crane-technologies/database/dist/interfaces/ITransaction';
+import Database from '@resonance-components/datahandler';
+import type { ITransaction } from '@/common/database/transaction.type';
 import {
   Promo,
   PromoAnalytics,

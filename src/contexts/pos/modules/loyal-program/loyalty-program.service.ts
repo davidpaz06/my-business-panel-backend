@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DATABASE } from '../../../general/modules/db/db.provider';
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { posQueries } from '@pos/pos.queries';
 import { NewLoyalProgramDto } from './dto/newLoyalProgram.dto';
 import { LoyalProgram } from './interface/loyal-program.interface';

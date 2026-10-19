@@ -1,4 +1,4 @@
-import Database from '@crane-technologies/database';
+import Database from '@resonance-components/datahandler';
 import { Inject, Injectable } from '@nestjs/common';
 import { DATABASE } from '../db/db.provider';
 import { NewMarginDto } from './dto/newMargin.dto';
