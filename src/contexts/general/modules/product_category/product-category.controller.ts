@@ -21,11 +21,15 @@ import {
   updateProductCategoryDoc,
   deleteProductCategoryDoc,
 } from '@/docs/contexts/general/product_category';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
-// ? UseGuards(AuthorizationGuard)
+// general_schema.product_category es un catalogo global (sin tenant_id):
+// solo la plataforma lo modifica; el resto de roles solo lo lee.
+const SUPERUSER_LEVEL = 4;
+
 @ApiTags('Product Category')
 @Controller('category')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class ProductCategoryController {
   constructor(
     private readonly productCategoryService: ProductCategoryService,
@@ -59,7 +63,7 @@ export class ProductCategoryController {
   @ApiResponse(createProductCategoryDoc.responses[401])
   @Post()
   @UseGuards(LevelAuthorizationGuard)
-  @RequiredLevel(2)
+  @RequiredLevel(SUPERUSER_LEVEL)
   async createCategory(@Body() req: { name: string }) {
     return this.productCategoryService.createCategory(req.name);
   }
@@ -70,7 +74,7 @@ export class ProductCategoryController {
   @ApiResponse(updateProductCategoryDoc.responses[404])
   @Put(':id')
   @UseGuards(LevelAuthorizationGuard)
-  @RequiredLevel(2)
+  @RequiredLevel(SUPERUSER_LEVEL)
   async updateCategory(@Param('id') id: string, @Body() req: { name: string }) {
     return this.productCategoryService.updateCategory(id, req.name);
   }
@@ -81,7 +85,7 @@ export class ProductCategoryController {
   @ApiResponse(deleteProductCategoryDoc.responses[404])
   @Delete(':id')
   @UseGuards(LevelAuthorizationGuard)
-  @RequiredLevel(2)
+  @RequiredLevel(SUPERUSER_LEVEL)
   async deleteCategory(@Param('id') id: string) {
     return this.productCategoryService.deleteCategory(id);
   }

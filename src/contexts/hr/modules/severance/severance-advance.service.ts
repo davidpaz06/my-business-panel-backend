@@ -31,6 +31,7 @@ export class SeveranceAdvanceService {
 
   /** Saldo de la garantia disponible y el maximo anticipable (Art. 144). */
   async available(tenantId: string, employeeId: string, date: string) {
+    await this.deposits.getEmployee(employeeId, tenantId);
     const balance = await this.balance(employeeId);
     const tope = await this.parameters.resolve(
       tenantId,
@@ -87,11 +88,24 @@ export class SeveranceAdvanceService {
     return result.rows[0];
   }
 
-  async listByEmployee(employeeId: string) {
+  async listByEmployee(tenantId: string, employeeId: string) {
+    await this.deposits.getEmployee(employeeId, tenantId);
     const result = await this.db.query(severanceAdvance.listByEmployee, [
       employeeId,
     ]);
     return result.rows;
+  }
+
+  /** Resumen de la garantia del empleado (deposito, intereses, anticipos, saldo). */
+  async summary(tenantId: string, employeeId: string) {
+    await this.deposits.getEmployee(employeeId, tenantId);
+    const [deposited, capitalized, advanced, total] = await Promise.all([
+      this.deposits.sumMadeAmount(employeeId),
+      this.interest.sumCapitalized(employeeId),
+      this.sumApproved(employeeId),
+      this.balance(employeeId),
+    ]);
+    return { deposited, capitalized, advanced, total };
   }
 
   async sumApproved(employeeId: string): Promise<Decimal> {

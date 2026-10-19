@@ -5,10 +5,11 @@ import { CalculateMoraDto, SalaryMinimumDifferenceDto } from './dto/mora.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Mora')
 @Controller('mora')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class MoraController {
   constructor(private readonly service: MoraService) {}
 

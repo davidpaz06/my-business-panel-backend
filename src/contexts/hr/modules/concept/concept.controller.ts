@@ -24,9 +24,10 @@ import {
   provisionConceptsDoc,
 } from '@/docs/contexts/hr/concept';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Concept')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('concept')
 export class ConceptController {
   constructor(

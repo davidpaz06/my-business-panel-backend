@@ -23,12 +23,13 @@ import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import type { RoyaltyInterval } from './interface/royalty-analytics.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 // Aislamiento por tenant: el tenant sale de la sesion; las rutas que conservan
 // :tenantId o tenant_id lo validan contra ella, y todo id de regla, opcion,
 // grupo o sucursal debe pertenecer al tenant de la sesion (404 si no).
 @ApiTags('POS Royalty')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('pos-royalty')
 export class PosRoyaltyController {
   constructor(

@@ -42,9 +42,11 @@ import {
   closeFiscalPeriodDoc,
 } from '@/docs/contexts/finances/expense';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Expense')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @RequiredRole(...FINANCE_READ_ROLES)
 @Controller('expense')
 export class ExpenseController {
@@ -118,6 +120,7 @@ export class ExpenseController {
   @ApiResponse(provisionCategoriesDoc.responses[201])
   @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('categories/provision/:tenantId')
+  @RateLimit('bulk')
   provisionCategories(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
@@ -131,6 +134,7 @@ export class ExpenseController {
   // -------------------------------------------------------
 
   @Get('analytics/fixed-vs-variable/:tenantId')
+  @RateLimit('report')
   getAnalyticsFixedVsVariable(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
@@ -148,6 +152,7 @@ export class ExpenseController {
   }
 
   @Get('analytics/fixed-breakdown/:tenantId')
+  @RateLimit('report')
   getAnalyticsFixedBreakdown(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
@@ -165,6 +170,7 @@ export class ExpenseController {
   }
 
   @Get('analytics/variable-breakdown/:tenantId')
+  @RateLimit('report')
   getAnalyticsVariableBreakdown(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
@@ -182,6 +188,7 @@ export class ExpenseController {
   }
 
   @Get('analytics/sales-vs-expenses/:tenantId')
+  @RateLimit('report')
   getAnalyticsSalesVsExpenses(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
@@ -199,6 +206,7 @@ export class ExpenseController {
   }
 
   @Get('analytics/payroll/:tenantId')
+  @RateLimit('report')
   getAnalyticsPayroll(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,
@@ -354,6 +362,7 @@ export class ExpenseController {
   @ApiResponse(closeFiscalPeriodDoc.responses[400])
   @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Patch('fiscal-periods/:tenantId/:periodId/close')
+  @RateLimit('sensitive')
   closeFiscalPeriod(
     @Session() session: IUserSession,
     @Param('periodId') periodId: string,

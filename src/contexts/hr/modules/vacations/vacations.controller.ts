@@ -14,10 +14,12 @@ import { EnjoyVacationDto, PayBonusDto } from './dto/vacation.dto';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Vacations')
 @Controller('vacations')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class VacationsController {
   constructor(
     private readonly service: VacationsService,
@@ -72,6 +74,7 @@ export class VacationsController {
   }
 
   @Post('periods/generate')
+  @RateLimit('bulk')
   generatePeriods(
     @Body() body: { employee_id: string; until: string },
     @Session() user: IUserSession,

@@ -34,9 +34,10 @@ import {
   updateOrderStatusDoc,
   updatePurchaseOrderDoc,
 } from '@/docs/contexts/purchase/purchase';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Purchase')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('purchase')
 export class PurchaseController {
   constructor(private readonly purchaseService: PurchaseService) {}

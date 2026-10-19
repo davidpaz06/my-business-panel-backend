@@ -12,6 +12,7 @@ import { SetBaseRateDto } from './dto/set-base-rate.dto';
 import { SetDeltaDto } from './dto/set-delta.dto';
 import { SetManualRateDto } from './dto/set-manual-rate.dto';
 import { SetAutoUpdateDto } from './dto/set-auto-update.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 /**
  * Tasa de cambio USD -> VES. Ledger inmutable: no hay PATCH ni DELETE --
@@ -20,7 +21,7 @@ import { SetAutoUpdateDto } from './dto/set-auto-update.dto';
 @ApiBearerAuth()
 @ApiTags('Exchange Rate')
 @Controller('exchange-rate')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class ExchangeRateController {
   constructor(private readonly service: ExchangeRateService) {}
 

@@ -26,10 +26,12 @@ import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { resolveSimulationDate } from '@/common/utilities/simulation-date';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Severance')
 @Controller('severance')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class SeveranceController {
   constructor(
     private readonly severance: SeveranceService,
@@ -73,6 +75,7 @@ export class SeveranceController {
   // ---- Depositos (Art. 142.a, 143) ----
 
   @Post('deposits/generate')
+  @RateLimit('bulk')
   generateDeposits(
     @Body() body: GenerateDepositsDto,
     @Session() user: IUserSession,
@@ -127,6 +130,7 @@ export class SeveranceController {
   }
 
   @Post('interest/generate')
+  @RateLimit('bulk')
   generateInterest(
     @Body() body: GenerateInterestDto,
     @Session() user: IUserSession,
@@ -135,8 +139,11 @@ export class SeveranceController {
   }
 
   @Post('interest/settle')
-  settleInterest(@Body() body: SettleInterestDto) {
-    return this.interestService.settle(body);
+  settleInterest(
+    @Body() body: SettleInterestDto,
+    @Session() user: IUserSession,
+  ) {
+    return this.interestService.settle(user.tenant_id, body);
   }
 
   @Get('interest/:employeeId')
@@ -144,8 +151,14 @@ export class SeveranceController {
     @Param('employeeId') employeeId: string,
     @Query('from') from: string,
     @Query('to') to: string,
+    @Session() user: IUserSession,
   ) {
-    return this.interestService.listByEmployee(employeeId, from, to);
+    return this.interestService.listByEmployee(
+      user.tenant_id,
+      employeeId,
+      from,
+      to,
+    );
   }
 
   // ---- Anticipos (Art. 144) ----
@@ -184,20 +197,22 @@ export class SeveranceController {
   }
 
   @Get('advances/:employeeId')
-  listAdvances(@Param('employeeId') employeeId: string) {
-    return this.advanceService.listByEmployee(employeeId);
+  listAdvances(
+    @Param('employeeId') employeeId: string,
+    @Session() user: IUserSession,
+  ) {
+    return this.advanceService.listByEmployee(user.tenant_id, employeeId);
   }
 
   // ---- Saldo consolidado ----
 
   @Get('balance/:employeeId')
-  async balance(@Param('employeeId') employeeId: string) {
-    const [deposited, capitalized, advanced, total] = await Promise.all([
-      this.depositService.sumMadeAmount(employeeId),
-      this.interestService.sumCapitalized(employeeId),
-      this.advanceService.sumApproved(employeeId),
-      this.advanceService.balance(employeeId),
-    ]);
+  async balance(
+    @Param('employeeId') employeeId: string,
+    @Session() user: IUserSession,
+  ) {
+    const { deposited, capitalized, advanced, total } =
+      await this.advanceService.summary(user.tenant_id, employeeId);
 
     return {
       depositedAmount: deposited.toFixed(4),

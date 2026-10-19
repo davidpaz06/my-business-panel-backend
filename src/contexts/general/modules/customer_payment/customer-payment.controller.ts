@@ -21,11 +21,13 @@ import {
   bulkInsertPaymentsDoc,
   deleteCustomerPaymentDoc,
 } from '@/docs/contexts/general/customer_payment';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 // Aislamiento por tenant: los pagos se listan y operan solo dentro del tenant
 // de la sesion; ventas, clientes y pagos ajenos responden 404.
 @ApiTags('Customer Payment')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('payment')
 export class CustomerPaymentController {
   constructor(
@@ -83,6 +85,7 @@ export class CustomerPaymentController {
   @ApiResponse(bulkInsertPaymentsDoc.responses[400])
   @ApiResponse(bulkInsertPaymentsDoc.responses[401])
   @Post('bulk')
+  @RateLimit('bulk')
   async bulkInsert(@Session() session: IUserSession, @Body() req: testdto) {
     await this.tenantScope.assertOwns('sale', req.sale_id, session);
     for (const payment of req.payments ?? []) {

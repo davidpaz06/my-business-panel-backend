@@ -29,9 +29,10 @@ import {
   updateCashRegisterDoc,
   removeCashRegisterDoc,
 } from '@/docs/contexts/pos/cash_register';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Cash Register')
-@UseGuards(AuthenticationGuard, LevelAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, LevelAuthorizationGuard)
 @Controller('cash-register')
 export class CashRegisterController {
   constructor(private readonly cashRegisterService: CashRegisterService) {}

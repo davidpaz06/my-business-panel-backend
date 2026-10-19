@@ -13,6 +13,12 @@ import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { IRequestWithCookies } from '@/common/interfaces/request_with_cookies.interface';
 import { loginDoc, logoutDoc } from '@/docs/contexts/general/auth';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import {
+  RateLimit,
+  byBodyField,
+  byCookieHash,
+} from '@/common/rate-limit/rate-limit.decorator';
 
 const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000; // 15 min, en linea con JWT_ACCESS_EXPIRATION
 const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias, en linea con JWT_REFRESH_EXPIRATION
@@ -57,6 +63,8 @@ export class AuthController {
   @ApiResponse(loginDoc.responses[200])
   @ApiResponse(loginDoc.responses[401])
   @Post('/login')
+  @UseGuards(RateLimitGuard)
+  @RateLimit('login', { identity: byBodyField('email') })
   async login(
     @Body() loginDto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -66,7 +74,8 @@ export class AuthController {
     return { message: 'Login successful', user };
   }
 
-  @UseGuards(RefreshTokenGuard)
+  @UseGuards(RefreshTokenGuard, RateLimitGuard)
+  @RateLimit('refresh', { identity: byCookieHash('refresh_token') })
   @Post('/refresh')
   async refresh(
     @Req() request: IRequestWithCookies,
@@ -78,8 +87,9 @@ export class AuthController {
     return { message: 'Token refreshed' };
   }
 
-  @UseGuards(AuthenticationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard)
   @Post('/change-password')
+  @RateLimit('sensitive')
   async changePassword(
     @Body() dto: ChangePasswordDto,
     @Session() user: IUserSession,
@@ -93,7 +103,7 @@ export class AuthController {
   @ApiOperation(logoutDoc.operation)
   @ApiResponse(logoutDoc.responses[200])
   @ApiResponse(logoutDoc.responses[401])
-  @UseGuards(AuthenticationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard)
   @Post('/logout')
   async logout(
     @Session() user: IUserSession,

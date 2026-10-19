@@ -9,9 +9,11 @@ import { FINANCE_READ_ROLES } from '@/contexts/finances/finances.roles';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('IVA')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @RequiredRole(...FINANCE_READ_ROLES)
 @Controller('iva')
 export class IvaController {
@@ -29,6 +31,7 @@ export class IvaController {
   @ApiQuery({ name: 'end', required: true, example: '2026-06-30' })
   @ApiResponse({ status: 200, description: 'Resumen de IVA calculado.' })
   @Get('summary/:tenantId')
+  @RateLimit('report')
   getSummary(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,

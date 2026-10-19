@@ -14,6 +14,23 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  // Detras del balanceador de Render, req.ip solo es la IP real del cliente si
+  // Express sabe cuantos proxies confiables hay delante. Sin esto todos los
+  // usuarios compartirian el cupo de la IP del balanceador; con un numero
+  // mayor al real, el cliente podria falsear X-Forwarded-For. Ajustar
+  // TRUST_PROXY_HOPS tras medirlo en el entorno (RATE_LIMIT_DEBUG=true registra
+  // ip y X-Forwarded-For de cada request).
+  const trustProxyHops = Number(configService.get<string>('TRUST_PROXY_HOPS'));
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .set(
+      'trust proxy',
+      Number.isInteger(trustProxyHops) && trustProxyHops >= 0
+        ? trustProxyHops
+        : 1,
+    );
+
   const allowedOriginsRaw = configService.get<string>('ALLOWED_ORIGINS');
   const allowedOrigins = allowedOriginsRaw
     ? allowedOriginsRaw

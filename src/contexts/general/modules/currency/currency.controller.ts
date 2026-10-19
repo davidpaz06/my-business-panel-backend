@@ -9,11 +9,12 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { CurrencyService } from './currency.service';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiBearerAuth()
 @ApiTags('Currency')
 @Controller('currency')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class CurrencyController {
   constructor(private readonly service: CurrencyService) {}
 

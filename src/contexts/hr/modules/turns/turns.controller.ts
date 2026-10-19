@@ -21,10 +21,11 @@ import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Turns')
 @Controller('turns')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class TurnsController {
   constructor(
     private readonly turnsService: TurnsService,

@@ -13,10 +13,12 @@ import {
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Payroll')
 @Controller('payroll')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class PayrollController {
   constructor(
     private readonly payrollService: PayrollService,
@@ -28,6 +30,7 @@ export class PayrollController {
   @ApiResponse(createPaysheetDoc.responses[400])
   @ApiResponse(createPaysheetDoc.responses[401])
   @Post('create')
+  @RateLimit('bulk')
   async createPaysheet(
     @Body() body: CreatePaysheetDto,
     @Session() user: IUserSession,
@@ -41,6 +44,7 @@ export class PayrollController {
   @ApiResponse(processPayrollDoc.responses[401])
   @ApiResponse(processPayrollDoc.responses[404])
   @Post(':id/process')
+  @RateLimit('bulk')
   async processPayroll(
     @Param('id') id: string,
     @Body() body: ProcessPaysheetDto,

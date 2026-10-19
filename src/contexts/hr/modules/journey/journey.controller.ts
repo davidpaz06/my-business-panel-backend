@@ -12,16 +12,20 @@ import { JourneyService } from './journey.service';
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Journey')
 @Controller('journey')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class JourneyController {
   constructor(private readonly service: JourneyService) {}
 
   @Get('limits/:contractId')
-  limitsByContract(@Param('contractId') contractId: string) {
-    return this.service.getLimitsByContract(contractId);
+  limitsByContract(
+    @Param('contractId') contractId: string,
+    @Session() user: IUserSession,
+  ) {
+    return this.service.getLimitsByContract(user.tenant_id, contractId);
   }
 
   @Get('limits')

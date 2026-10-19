@@ -15,9 +15,10 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { DisputesService } from './disputes.service';
 import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Purchase Disputes')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('purchase/disputes')
 export class DisputesController {
   constructor(private readonly disputesService: DisputesService) {}

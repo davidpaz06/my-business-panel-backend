@@ -101,6 +101,15 @@ create(@Body() dto: CreateThingDto, @Session() user: IUserSession) {
 - Exact `role_name` strings live in `../my-business-panel-database/seeds/catalog/general/005-insert-roles.sql`. `role_id 4 = employee`. Verify the seed before using a new role name.
 - Never invent an alternative auth flow — match this stack.
 
+## Rate limiting
+
+`RateLimitGuard` (`src/common/rate-limit/`) counts every request in several buckets and rejects with 429 + `Retry-After` when ANY is exceeded: by **IP** (IPv6 grouped by /64), by **authenticated user** (so a user spread over many IPs is still capped) and, where the route defines one, by **identity** (login email, hash of the refresh token). Counters are in memory per process (swap `RateLimitStore` for Redis if the API scales to several instances).
+
+- Declare it right after the auth guard: `@UseGuards(AuthenticationGuard, RateLimitGuard, ...)`. On public routes declare it alone (IP + identity only).
+- The tier defaults to `read` for GET/HEAD and `write` for the rest. Override per route with `@RateLimit('bulk' | 'lookup' | 'sensitive' | 'public' | 'login' | 'refresh' | 'webhook')`; limits live in `rate-limit.config.ts`. `@SkipRateLimit()` needs a written justification.
+- `rate-limit-coverage.spec.ts` fails if a controller of a covered context lacks the guard or has it before `AuthenticationGuard`. Add each context to `COVERED_CONTEXTS` when it is done.
+- Env: `TRUST_PROXY_HOPS` (proxies in front of Express, default 1; must match the platform or every user shares one IP bucket, or `X-Forwarded-For` becomes spoofable), `RATE_LIMIT_MULTIPLIER` (scale all limits), `RATE_LIMIT_DISABLED=true` (off), `RATE_LIMIT_DEBUG=true` (logs resolved IP and `X-Forwarded-For`, used to measure the hop count).
+
 ## Multi-tenancy
 
 Every domain row is scoped by `tenant_id`. Pull it from `@Session() user` and pass into the service. **Never** accept a `tenant_id` from a client body or query string. Every query that touches tenant data must include `WHERE tenant_id = $X`.

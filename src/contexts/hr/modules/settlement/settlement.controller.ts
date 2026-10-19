@@ -17,10 +17,12 @@ import {
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Settlement')
 @Controller('settlement')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class SettlementController {
   constructor(private readonly service: SettlementService) {}
 
@@ -67,6 +69,7 @@ export class SettlementController {
   }
 
   @Post(':id/void')
+  @RateLimit('sensitive')
   void_(
     @Param('id') id: string,
     @Body() _body: VoidSettlementDto,

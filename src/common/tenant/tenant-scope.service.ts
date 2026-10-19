@@ -78,6 +78,10 @@ const OWNERSHIP_QUERIES = {
     SELECT 1 FROM hr_schema.contract
     WHERE contract_id = $1 AND tenant_id = $2 LIMIT 1
   `,
+  dutiesType: `
+    SELECT 1 FROM hr_schema.duties_type
+    WHERE duties_type_id = $1 AND tenant_id = $2 LIMIT 1
+  `,
   turn: `
     SELECT 1 FROM hr_schema.turn t
     INNER JOIN general_schema.branch b ON b.branch_id = t.branch_id

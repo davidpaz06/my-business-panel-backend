@@ -16,14 +16,17 @@ import {
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Credit/Debit Notes')
 @Controller('credit-debit-notes')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class CreditDebitNoteController {
   constructor(private readonly service: CreditDebitNoteService) {}
 
   @Post()
+  @RateLimit('sensitive')
   create(
     @Body() body: CreateCreditDebitNoteDto,
     @Session() user: IUserSession,
@@ -45,6 +48,7 @@ export class CreditDebitNoteController {
   }
 
   @Patch(':noteId/void')
+  @RateLimit('sensitive')
   voidNote(
     @Param('noteId') noteId: string,
     @Body() body: VoidCreditDebitNoteDto,

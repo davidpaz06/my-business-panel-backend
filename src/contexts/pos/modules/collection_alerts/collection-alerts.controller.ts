@@ -14,9 +14,11 @@ import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { CollectionAlertsService } from './collection-alerts.service';
 import { UpsertCollectionAlertConfigDto } from './dto/upsert-collection-alert-config.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Collection Alerts')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('pos/collection-alerts')
 export class CollectionAlertsController {
   constructor(
@@ -63,6 +65,7 @@ export class CollectionAlertsController {
 
   @ApiOperation({ summary: 'Generar alertas de cobro pendientes' })
   @Post('generate')
+  @RateLimit('bulk')
   generate(
     @Session() session: IUserSession,
     @Query('tenantId') tenantId?: string,

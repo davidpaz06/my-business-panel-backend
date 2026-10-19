@@ -14,9 +14,11 @@ import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { PaymentAlertsService } from './payment-alerts.service';
 import { UpsertPaymentAlertConfigDto } from './dto/upsert-payment-alert-config.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Payment Alerts')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('payment-alerts')
 export class PaymentAlertsController {
   constructor(private readonly paymentAlertsService: PaymentAlertsService) {}
@@ -76,6 +78,7 @@ export class PaymentAlertsController {
     description: 'Alertas de pago generadas correctamente',
   })
   @Post('generate')
+  @RateLimit('bulk')
   generate(
     @Session() session: IUserSession,
     @Query('tenantId') tenantId?: string,

@@ -22,6 +22,8 @@ import {
   createSubscriptionDoc,
   handleWebhookDoc,
 } from '@/docs/contexts/general/subscription';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Subscription')
 @Controller('subscription')
@@ -38,9 +40,10 @@ export class SubscriptionController {
   // Cobra al cliente de Stripe del tenant: solo admin de ese tenant (o el
   // superusuario de plataforma). El webhook de abajo es publico a proposito
   // (se autentica con la firma de Stripe).
-  @UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
   @RequiredRole('superuser', 'admin')
   @Post('create')
+  @RateLimit('sensitive')
   async createSubscription(
     @Session() session: IUserSession,
     @Body() req: NewSubscriptionDto,
@@ -56,6 +59,8 @@ export class SubscriptionController {
   @ApiResponse(handleWebhookDoc.responses[200])
   @ApiResponse(handleWebhookDoc.responses[400])
   @Post('webhook')
+  @UseGuards(RateLimitGuard)
+  @RateLimit('webhook')
   async handleWebhook(
     @Req() req: RawBodyRequest<any>,
     @Headers('stripe-signature') signature: string,

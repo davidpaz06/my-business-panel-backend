@@ -9,10 +9,11 @@ import {
   getOneDocumentTypeDoc,
   deleteDocumentTypeDoc,
 } from '@/docs/contexts/general/identification-type';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 // Catalogo global: lectura con sesion; borrar solo el superusuario de plataforma.
 @ApiTags('Document Type')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @Controller('document')
 export class IdentificationTypeController {
   constructor(

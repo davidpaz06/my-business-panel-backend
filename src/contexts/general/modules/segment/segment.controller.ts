@@ -18,11 +18,12 @@ import {
   newSegmentDoc,
   deleteSegmentDoc,
 } from '@/docs/contexts/general/segment';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 // Catalogo global: cualquier usuario con sesion lo lee; solo el superusuario
 // de plataforma lo modifica.
 @ApiTags('Segment')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @Controller('segment')
 export class SegmentController {
   constructor(private readonly segmentService: SegmentService) {}

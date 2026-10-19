@@ -12,6 +12,8 @@ import {
   getItemDoc,
   deleteItemDoc,
 } from '@/docs/contexts/pos/sale-item';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 // Las lineas de venta se crean unicamente a traves de POST /sale (flujo
 // transaccional con stock, factura y pagos). El antiguo POST /items insertaba
@@ -19,7 +21,7 @@ import {
 // se retiro.
 @ApiTags('Sale Item')
 @Controller('items')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 export class SaleItemController {
   constructor(
     private readonly itemService: SaleItemService,
@@ -57,6 +59,7 @@ export class SaleItemController {
   @ApiResponse(deleteItemDoc.responses[404])
   @RequiredRole('admin', 'superuser')
   @Delete(':id')
+  @RateLimit('sensitive')
   async deleteItem(@Session() session: IUserSession, @Param('id') id: string) {
     return this.itemService.deleteItem(id, this.tenantScope.scopeFor(session));
   }

@@ -27,9 +27,11 @@ import {
   SetSupplierRetentionDto,
   SetWithholdingAgentDto,
 } from './dto/iva-withholding.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('IVA - Retenciones')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @RequiredRole(...FINANCE_READ_ROLES)
 @Controller('iva/withholdings')
 export class IvaWithholdingController {
@@ -111,7 +113,9 @@ export class IvaWithholdingController {
     );
   }
 
-  @ApiOperation({ summary: 'Emitir el comprobante de retencion de una factura' })
+  @ApiOperation({
+    summary: 'Emitir el comprobante de retencion de una factura',
+  })
   @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post(':tenantId')
   issue(
@@ -129,6 +133,7 @@ export class IvaWithholdingController {
   @ApiOperation({ summary: 'Anular un comprobante de retencion' })
   @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Patch(':tenantId/:withholdingId/void')
+  @RateLimit('sensitive')
   void(
     @Session() session: IUserSession,
     @Param('tenantId') tenantId: string,

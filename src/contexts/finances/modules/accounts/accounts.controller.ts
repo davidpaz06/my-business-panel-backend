@@ -12,9 +12,11 @@ import {
   AccountListQueryDto,
   AccountsOverviewQueryDto,
 } from './dto/accounts-query.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Finances - Accounts')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @RequiredRole(...FINANCE_READ_ROLES)
 @Controller('finances/accounts')
 export class AccountsController {
@@ -29,6 +31,7 @@ export class AccountsController {
   @ApiResponse({ status: 200, description: 'Resumen de cuentas obtenido' })
   @ApiResponse({ status: 401, description: 'No autenticado' })
   @Get()
+  @RateLimit('report')
   getAccountsOverview(
     @Session() session: IUserSession,
     @Query() query: AccountsOverviewQueryDto,

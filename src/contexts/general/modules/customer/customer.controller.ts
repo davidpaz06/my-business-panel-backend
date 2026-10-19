@@ -27,13 +27,15 @@ import {
   updateCustomerDoc,
   deleteCustomerDoc,
 } from '@/docs/contexts/general/customer';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 // Aislamiento por tenant: el tenant sale SIEMPRE de la sesion. Las rutas que
 // conservan :tenantId (compatibilidad con el frontend) lo validan contra la
 // sesion; ningun endpoint confia en un tenant_id enviado por el cliente.
 @ApiTags('Customer')
 @Controller('customers')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 export class CustomerController {
   constructor(
     private readonly customerService: CustomerService,
@@ -58,6 +60,7 @@ export class CustomerController {
   // sobre el tenant de la sesion: con un tenant ajeno serviria para averiguar
   // si un documento, email o telefono existe en otra empresa.
   @Get('availability')
+  @RateLimit('lookup')
   async checkAvailability(
     @Session() session: IUserSession,
     @Query('field') field: string,

@@ -29,10 +29,12 @@ import {
   deleteEmployeeDoc,
 } from '@/docs/contexts/hr/employee';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Employee')
 @Controller('employee')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class EmployeeController {
   constructor(
     private readonly employeeService: EmployeeService,
@@ -179,6 +181,7 @@ export class EmployeeController {
   @ApiResponse(deleteEmployeeDoc.responses[401])
   @ApiResponse(deleteEmployeeDoc.responses[404])
   @Delete(':id')
+  @RateLimit('sensitive')
   async deleteEmployee(
     @Session() session: IUserSession,
     @Param('id') id: string,

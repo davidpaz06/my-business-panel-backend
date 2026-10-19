@@ -29,12 +29,13 @@ import {
   findAllBranchesDoc,
   createBranchDoc,
 } from '@/docs/contexts/general/branch';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 // Aislamiento por tenant: toda ruta exige sesion; una sucursal de otro tenant
 // responde 404. Solo el superusuario de plataforma ve o crea fuera de su tenant.
 @ApiBearerAuth()
 @ApiTags('Branch')
-@UseGuards(AuthenticationGuard, LevelAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, LevelAuthorizationGuard)
 @Controller('branch')
 export class BranchController {
   constructor(

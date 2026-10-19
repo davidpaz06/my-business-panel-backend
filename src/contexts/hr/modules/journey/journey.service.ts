@@ -43,10 +43,10 @@ export class JourneyService {
     return { journeyType: type, ...limit, article: '173' };
   }
 
-  async getLimitsByContract(contractId: string) {
+  async getLimitsByContract(tenantId: string, contractId: string) {
     const result = await this.db.query(contractQueries.byId, [contractId]);
 
-    if (!result.rows.length) {
+    if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
       throw new NotFoundException(`Contrato ${contractId} no encontrado.`);
     }
 

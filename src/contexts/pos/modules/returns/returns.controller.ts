@@ -23,12 +23,14 @@ import {
   createReturnTransactionDoc,
   findReturnsDoc,
 } from '@/docs/contexts/pos/returns';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 // Devoluciones: mueven dinero e inventario. Todo exige sesion y queda acotado
 // al tenant de la sesion (la venta se resuelve a traves de su sucursal).
 @ApiTags('Returns')
 @Controller('returns')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class ReturnsController {
   constructor(
     private readonly returnsService: ReturnsService,
@@ -40,6 +42,7 @@ export class ReturnsController {
   @ApiResponse(createReturnTransactionDoc.responses[500])
   @ApiResponse(createReturnTransactionDoc.responses[401])
   @Post()
+  @RateLimit('sensitive')
   createReturnTransaction(
     @Session() session: IUserSession,
     @Body() req: ReturnTransactionDto,
@@ -96,6 +99,7 @@ export class ReturnsController {
    * Invoices are preserved; the is_refunded flag on the sale marks it cancelled.
    */
   @Post('sale/:saleId/full-refund')
+  @RateLimit('sensitive')
   processFullRefund(
     @Session() session: IUserSession,
     @Param('saleId', ParseUUIDPipe) saleId: string,

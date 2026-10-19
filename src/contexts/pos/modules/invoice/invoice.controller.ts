@@ -20,12 +20,14 @@ import {
   getCustomerInvoicesDoc,
   deleteInvoiceDoc,
 } from '@/docs/contexts/pos/invoice';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 // Facturas: documentos fiscales con datos del comprador. Todo acceso exige
 // sesion y queda acotado al tenant de la sesion.
 @ApiTags('Invoice')
 @Controller('invoice')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 export class InvoiceController {
   constructor(
     private readonly invoiceService: InvoiceService,
@@ -94,6 +96,7 @@ export class InvoiceController {
   @ApiResponse(deleteInvoiceDoc.responses[404])
   @RequiredRole('admin', 'superuser')
   @Delete(':id')
+  @RateLimit('sensitive')
   async deleteInvoice(
     @Session() session: IUserSession,
     @Param('id') id: string,

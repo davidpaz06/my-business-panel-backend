@@ -23,9 +23,11 @@ import {
   updateSupplierDoc,
   deleteSupplierDoc,
 } from '@/docs/contexts/purchase/suppliers';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Suppliers')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('suppliers')
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
@@ -45,6 +47,7 @@ export class SuppliersController {
   @ApiResponse(createSuppliersBulkDoc.responses[201])
   @ApiResponse(createSuppliersBulkDoc.responses[401])
   @Post('bulk')
+  @RateLimit('bulk')
   createSuppliersBulk(
     @Body() createSuppliersDto: CreateSupplierDto[],
     @Session() userSession: IUserSession,

@@ -17,9 +17,10 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { AccountsReceivableService } from './accounts-receivable.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Accounts Receivable')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('pos/receivables')
 export class AccountsReceivableController {
   constructor(

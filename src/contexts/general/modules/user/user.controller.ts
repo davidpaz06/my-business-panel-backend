@@ -36,12 +36,19 @@ import {
   getUserByIdDoc,
   deleteUserDoc,
 } from '@/docs/contexts/general/user';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 // Aislamiento por tenant: el tenant sale SIEMPRE de la sesion. Un usuario de
 // otro tenant responde 404 y nadie puede otorgar un rol superior al suyo.
 @ApiTags('User')
 @Controller('user')
-@UseGuards(AuthenticationGuard, LevelAuthorizationGuard, RoleAuthorizationGuard)
+@UseGuards(
+  AuthenticationGuard,
+  RateLimitGuard,
+  LevelAuthorizationGuard,
+  RoleAuthorizationGuard,
+)
 export class UserController {
   constructor(
     private readonly userService: UserService,
@@ -68,6 +75,7 @@ export class UserController {
   @ApiResponse(createUsersBulkDoc.responses[401])
   @Post('bulk')
   @RequiredLevel(3)
+  @RateLimit('bulk')
   async createUsersBulk(
     @Body() createUserDtos: CreateUserBulkDto,
     @Session() session: IUserSession,
@@ -104,6 +112,7 @@ export class UserController {
   // Uniqueness probe — checks the global unique constraint on users.email.
   @Get('availability')
   @RequiredLevel(3)
+  @RateLimit('lookup')
   async checkAvailability(
     @Query('email') email: string,
     @Query('exclude_id') excludeId?: string,
@@ -156,6 +165,7 @@ export class UserController {
   // Solo el rol admin (no superuser ni manager) restablece claves de empleados.
   @Patch(':userId/password')
   @RequiredRole('admin')
+  @RateLimit('sensitive')
   async resetEmployeePassword(
     @Param('userId') userId: string,
     @Body() dto: ResetEmployeePasswordDto,

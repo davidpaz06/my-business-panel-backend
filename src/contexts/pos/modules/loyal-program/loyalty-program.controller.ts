@@ -23,12 +23,13 @@ import {
   updateLoyalProgramDoc,
   deleteLoyalProgramDoc,
 } from '@/docs/contexts/pos/loyal-program';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 // El tenant sale de la sesion. :tenant_id se conserva por compatibilidad con
 // el frontend pero se valida contra la sesion.
 @ApiTags('Loyal Program')
 @Controller('loyal-program')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class LoyalProgramController {
   constructor(
     private readonly loyalService: LoyalProgramService,

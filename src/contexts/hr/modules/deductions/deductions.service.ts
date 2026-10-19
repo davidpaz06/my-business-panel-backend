@@ -15,7 +15,7 @@ import {
   ApplyDeductionPaymentDto,
 } from './dto/deduction.dto';
 
-const { employeeDeduction, settlement } = hrQueries;
+const { employeeDeduction, settlement, employee } = hrQueries;
 
 /** Tope de descuento durante la relacion: 1/3 del periodo (Art. 154). */
 const PERIOD_DEDUCTION_FRACTION = 1 / 3;
@@ -30,6 +30,8 @@ export class DeductionsService {
   ) {}
 
   async create(tenantId: string, dto: CreateDeductionDto) {
+    await this.assertEmployeeOwned(dto.employee_id, tenantId);
+
     // Arts. 412/413: la cuota sindical exige autorizacion expresa.
     if (
       dto.kind === 'sindical' &&
@@ -76,6 +78,7 @@ export class DeductionsService {
 
   /** Margen disponible de descuento (Art. 154): tope 1/3 del salario del periodo. */
   async availableMargin(tenantId: string, employeeId: string, date: string) {
+    await this.assertEmployeeOwned(employeeId, tenantId);
     const monthlySalary = await this.salaryHistory.resolve(employeeId, date);
     const maxDeduction = monthlySalary.mul(PERIOD_DEDUCTION_FRACTION);
 
@@ -96,7 +99,8 @@ export class DeductionsService {
     };
   }
 
-  async listByEmployee(employeeId: string, active?: boolean) {
+  async listByEmployee(tenantId: string, employeeId: string, active?: boolean) {
+    await this.assertEmployeeOwned(employeeId, tenantId);
     const result = await this.db.query(employeeDeduction.listByEmployee, [
       employeeId,
     ]);
@@ -151,7 +155,8 @@ export class DeductionsService {
     ]);
     if (
       !settlementRow.rows.length ||
-      settlementRow.rows[0].tenant_id !== tenantId
+      settlementRow.rows[0].tenant_id !== tenantId ||
+      settlementRow.rows[0].employee_id !== employeeId
     ) {
       throw new NotFoundException(`Liquidacion ${settlementId} no encontrada.`);
     }
@@ -183,6 +188,14 @@ export class DeductionsService {
       remainingDebt: remainingDebt.toFixed(4),
       article: '154',
     };
+  }
+
+  /** 404 si el empleado no existe en el tenant (no revela que existe en otro). */
+  private async assertEmployeeOwned(employeeId: string, tenantId: string) {
+    const result = await this.db.query(employee.getForSalary, [employeeId]);
+    if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
+      throw new NotFoundException(`Empleado ${employeeId} no encontrado.`);
+    }
   }
 
   private async assertOwnership(deductionId: string, tenantId: string) {

@@ -8,9 +8,11 @@ import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
 import { FINANCE_READ_ROLES } from '@/contexts/finances/finances.roles';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Finances - Loyalty')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @RequiredRole(...FINANCE_READ_ROLES)
 @Controller('finances/loyalty')
 export class LoyaltyController {
@@ -24,6 +26,7 @@ export class LoyaltyController {
   @ApiResponse({ status: 400, description: 'Intervalo invalido' })
   @ApiResponse({ status: 401, description: 'No autenticado' })
   @Get('overview')
+  @RateLimit('report')
   getOverview(
     @Query() dto: GetLoyaltyOverviewDto,
     @Session() session: IUserSession,

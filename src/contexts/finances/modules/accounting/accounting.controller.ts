@@ -42,9 +42,11 @@ import {
   createJournalEntryDoc,
   voidJournalEntryDoc,
 } from '@/docs/contexts/finances/accounting';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Accounting')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @RequiredRole(...FINANCE_READ_ROLES)
 @Controller('accounting')
 export class AccountingController {
@@ -132,6 +134,7 @@ export class AccountingController {
   @ApiResponse(provisionAccountsDoc.responses[401])
   @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('accounts/provision')
+  @RateLimit('bulk')
   provisionAccounts(@Session() session: IUserSession) {
     return this.accountingService.provisionTenantAccounts(session.tenant_id);
   }
@@ -232,6 +235,7 @@ export class AccountingController {
   @ApiResponse(voidJournalEntryDoc.responses[404])
   @RequiredRole(...FINANCE_ADMIN_ROLES)
   @Post('journal-entries/:id/void')
+  @RateLimit('sensitive')
   voidJournalEntry(@Param('id') id: string, @Session() session: IUserSession) {
     return this.accountingService.voidJournalEntry(
       id,

@@ -25,11 +25,12 @@ import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 // ? UseGuards(AuthorizationGuard)
 //Lets try to think about a better name for the route
 @ApiTags('Customer Segment Margin')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('margin')
 export class CustomerSegmentMarginController {
   constructor(

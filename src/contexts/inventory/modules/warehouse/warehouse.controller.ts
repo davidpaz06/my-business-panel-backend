@@ -39,9 +39,11 @@ import {
   getDiscrepancyReportByIdDoc,
   transferInventoryDoc,
 } from '@/docs/contexts/inventory/warehouse';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Warehouse')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 @Controller('warehouse')
 export class WarehouseController {
   constructor(private readonly warehouseService: WarehouseService) {}
@@ -66,6 +68,7 @@ export class WarehouseController {
   @ApiResponse(deleteWarehouseDoc.responses[401])
   @ApiResponse(deleteWarehouseDoc.responses[404])
   @Delete(':warehouse_id')
+  @RateLimit('sensitive')
   deleteWarehouse(
     @Param('warehouse_id') warehouse_id: string,
     @Session() userSession: IUserSession,
@@ -145,6 +148,7 @@ export class WarehouseController {
   }
 
   @Post('inventory/bulk')
+  @RateLimit('bulk')
   bulkInsertInventory(
     @Body() body: BulkInsertInventoryDto,
     @Session() userSession: IUserSession,
@@ -241,6 +245,7 @@ export class WarehouseController {
   @ApiResponse(countAllInWarehouseDoc.responses[201])
   @ApiResponse(countAllInWarehouseDoc.responses[401])
   @Post('count')
+  @RateLimit('bulk')
   countAllProductsInWarehouse(
     @Body() countAllInWarehouseDto: CountAllInWarehouseDto,
     @Session() userSession: IUserSession,
@@ -256,6 +261,7 @@ export class WarehouseController {
   @ApiResponse(generateDiscrepancyReportDoc.responses[401])
   @ApiResponse(generateDiscrepancyReportDoc.responses[404])
   @Post('discrepancy-report')
+  @RateLimit('bulk')
   generateDiscrepancyReport(
     @Session() userSession: IUserSession,
     @Body() createDiscrepancyReport: CreateDiscrepancyReport,
@@ -300,6 +306,7 @@ export class WarehouseController {
   }
 
   @Patch('discrepancy-report/:report_id/apply')
+  @RateLimit('sensitive')
   applyDiscrepancyAdjustment(
     @Param('report_id') report_id: string,
     @Session() userSession: IUserSession,

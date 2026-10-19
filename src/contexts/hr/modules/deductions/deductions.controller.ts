@@ -18,10 +18,11 @@ import {
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('Deductions')
 @Controller('deductions')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class DeductionsController {
   constructor(private readonly service: DeductionsService) {}
 
@@ -75,6 +76,7 @@ export class DeductionsController {
     @Session() user: IUserSession,
   ) {
     return this.service.listByEmployee(
+      user.tenant_id,
       employeeId,
       active === undefined ? undefined : active === 'true',
     );

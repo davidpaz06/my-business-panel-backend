@@ -8,9 +8,11 @@ import { RequiredRole } from '@/common/decorators/role_metadata.decorator';
 import { FINANCE_READ_ROLES } from '@/contexts/finances/finances.roles';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('Finances - Cash Flow')
-@UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
 @RequiredRole(...FINANCE_READ_ROLES)
 @Controller('finances/cash-flow')
 export class CashFlowController {
@@ -18,6 +20,7 @@ export class CashFlowController {
 
   @ApiOperation({ summary: 'Flujo de caja historico por periodo y agrupacion' })
   @Get()
+  @RateLimit('report')
   getCashFlow(@Query() dto: GetCashFlowDto, @Session() session: IUserSession) {
     return this.cashFlowService.getCashFlow(
       dto.startDate,
@@ -30,6 +33,7 @@ export class CashFlowController {
 
   @ApiOperation({ summary: 'Proyecciones de flujo de caja futuras' })
   @Get('projections')
+  @RateLimit('report')
   getProjections(@Session() session: IUserSession) {
     return this.cashFlowService.getProjections(session);
   }

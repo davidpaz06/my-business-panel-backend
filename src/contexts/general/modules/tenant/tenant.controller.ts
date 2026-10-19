@@ -32,6 +32,8 @@ import {
   updateTenantDoc,
   deleteTenantDoc,
 } from '@/docs/contexts/general/tenant';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 // Rutas publicas a proposito (onboarding, usuario aun sin cuenta):
 //   GET  /tenant/availability  y  POST /tenant (solo con user + subscription).
@@ -59,7 +61,7 @@ export class TenantController {
   @ApiOperation(getAllTenantsDoc.operation)
   @ApiResponse(getAllTenantsDoc.responses[200])
   @ApiResponse(getAllTenantsDoc.responses[401])
-  @UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
   @RequiredRole('superuser')
   @Get()
   async getAllTenants() {
@@ -73,6 +75,8 @@ export class TenantController {
    * usuario aún no se ha registrado.
    */
   @Get('availability')
+  @UseGuards(RateLimitGuard)
+  @RateLimit('lookup')
   async checkOnboardingAvailability(
     @Query('field') field: string,
     @Query('value') value: string,
@@ -97,7 +101,7 @@ export class TenantController {
   @ApiOperation(getSingleTenantDoc.operation)
   @ApiResponse(getSingleTenantDoc.responses[200])
   @ApiResponse(getSingleTenantDoc.responses[401])
-  @UseGuards(AuthenticationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard)
   @Get(':id')
   async getSingleTenant(
     @Session() session: IUserSession,
@@ -112,7 +116,7 @@ export class TenantController {
   @ApiResponse(getUsersByTenantDoc.responses[200])
   @ApiResponse(getUsersByTenantDoc.responses[400])
   @ApiResponse(getUsersByTenantDoc.responses[401])
-  @UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
   @RequiredRole('superuser', 'admin', 'manager')
   @Get(':id/users')
   async getUsersByTenant(
@@ -130,6 +134,8 @@ export class TenantController {
   @ApiResponse(createTenantDoc.responses[400])
   @ApiResponse(createTenantDoc.responses[401])
   @Post()
+  @UseGuards(RateLimitGuard)
+  @RateLimit('sensitive')
   async createTenant(
     @Body() req: NewTenantDto,
     @Res({ passthrough: true }) response: Response,
@@ -159,9 +165,10 @@ export class TenantController {
   @ApiOperation({
     summary: 'Crear un tenant suelto (solo plataforma)',
   })
-  @UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
   @RequiredRole('superuser')
   @Post('bare')
+  @RateLimit('sensitive')
   async createBareTenant(@Body() req: NewTenantDto) {
     return this.tenantService.createTenant({
       ...req,
@@ -174,7 +181,7 @@ export class TenantController {
   @ApiResponse(updateTenantDoc.responses[200])
   @ApiResponse(updateTenantDoc.responses[400])
   @ApiResponse(updateTenantDoc.responses[401])
-  @UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
   @RequiredRole('superuser', 'admin')
   @Patch(':id')
   async updateTenant(
@@ -199,9 +206,10 @@ export class TenantController {
   @ApiResponse(deleteTenantDoc.responses[200])
   @ApiResponse(deleteTenantDoc.responses[401])
   @ApiResponse(deleteTenantDoc.responses[404])
-  @UseGuards(AuthenticationGuard, RoleAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, RoleAuthorizationGuard)
   @RequiredRole('superuser')
   @Delete(':id')
+  @RateLimit('sensitive')
   async deleteTenant(@Param('id') id: string) {
     return this.tenantService.deleteTenant(id);
   }

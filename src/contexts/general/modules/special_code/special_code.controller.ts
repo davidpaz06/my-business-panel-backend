@@ -18,6 +18,8 @@ import { IUserSession } from '@/common/interfaces/user_session.interface';
 
 import { SpecialCodeService } from './special_code.service';
 import { CreateSpecialCodeDto } from './dto/create_special_code.dto';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 const SUPERUSER_LEVEL = 4;
 
@@ -31,7 +33,7 @@ export class SpecialCodeController {
    * Listar todos los códigos. Solo superusuarios.
    */
   @Get('/')
-  @UseGuards(AuthenticationGuard, LevelAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, LevelAuthorizationGuard)
   @RequiredLevel(SUPERUSER_LEVEL)
   async listAll() {
     return this.service.listAll();
@@ -41,7 +43,7 @@ export class SpecialCodeController {
    * Crear un nuevo código. Solo superusuarios.
    */
   @Post('/')
-  @UseGuards(AuthenticationGuard, LevelAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, LevelAuthorizationGuard)
   @RequiredLevel(SUPERUSER_LEVEL)
   async create(
     @Body() dto: CreateSpecialCodeDto,
@@ -55,7 +57,7 @@ export class SpecialCodeController {
    * Solo superusuarios.
    */
   @Delete('/:id')
-  @UseGuards(AuthenticationGuard, LevelAuthorizationGuard)
+  @UseGuards(AuthenticationGuard, RateLimitGuard, LevelAuthorizationGuard)
   @RequiredLevel(SUPERUSER_LEVEL)
   async remove(@Param('id') id: string) {
     return this.service.deleteUnused(id);
@@ -68,6 +70,8 @@ export class SpecialCodeController {
    * el canje atómico.
    */
   @Get('/validate')
+  @UseGuards(RateLimitGuard)
+  @RateLimit('sensitive')
   async validate(@Query('code') code: string) {
     if (!code) return { valid: false, reason: 'not_found' as const };
     return this.service.validateForOnboarding(code);

@@ -20,10 +20,12 @@ import {
 import { AuthenticationGuard } from '@/common/guards/authentication.guard';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 @ApiTags('ProfitSharing')
 @Controller('profit-sharing')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class ProfitSharingController {
   constructor(
     private readonly service: ProfitSharingService,
@@ -57,11 +59,13 @@ export class ProfitSharingController {
   }
 
   @Post('periods/:id/calculate')
+  @RateLimit('bulk')
   calculate(@Param('id') id: string, @Session() user: IUserSession) {
     return this.periods.calculate(user.tenant_id, id);
   }
 
   @Post('periods/:id/close')
+  @RateLimit('sensitive')
   close(@Param('id') id: string, @Session() user: IUserSession) {
     return this.periods.close(user.tenant_id, id);
   }

@@ -28,6 +28,7 @@ export class ProfitSharingService {
     year: number,
     explain = false,
   ) {
+    await this.assertEmployeeOwned(employeeId, tenantId);
     const dateInYear = `${year}-12-01`;
     let diasUtilidades: Decimal;
     try {
@@ -71,6 +72,7 @@ export class ProfitSharingService {
   }
 
   async payYearEndBonus(tenantId: string, dto: YearEndBonusDto) {
+    await this.assertEmployeeOwned(dto.employee_id, tenantId);
     let period = (
       await this.db.query(profitSharingPeriod.getByYear, [
         tenantId,
@@ -160,5 +162,13 @@ export class ProfitSharingService {
       article: '131',
       note: 'estimado con el minimo legal; el monto final depende del cierre contable del ejercicio',
     };
+  }
+
+  /** 404 si el empleado no existe en el tenant (no revela que existe en otro). */
+  private async assertEmployeeOwned(employeeId: string, tenantId: string) {
+    const result = await this.db.query(employee.getForSalary, [employeeId]);
+    if (!result.rows.length || result.rows[0].tenant_id !== tenantId) {
+      throw new NotFoundException(`Empleado ${employeeId} no encontrado.`);
+    }
   }
 }

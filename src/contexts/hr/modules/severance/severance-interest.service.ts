@@ -115,7 +115,13 @@ export class SeveranceInterestService {
     return { generated: created.length, interest: created };
   }
 
-  async listByEmployee(employeeId: string, from: string, to: string) {
+  async listByEmployee(
+    tenantId: string,
+    employeeId: string,
+    from: string,
+    to: string,
+  ) {
+    await this.deposits.getEmployee(employeeId, tenantId);
     const result = await this.db.query(severanceInterest.listByEmployeeRange, [
       employeeId,
       from,
@@ -124,7 +130,8 @@ export class SeveranceInterestService {
     return result.rows;
   }
 
-  async settle(dto: SettleInterestDto) {
+  async settle(tenantId: string, dto: SettleInterestDto) {
+    await this.deposits.getEmployee(dto.employee_id, tenantId);
     const result = await this.db.query(severanceInterest.settleYear, [
       dto.capitalize,
       dto.employee_id,

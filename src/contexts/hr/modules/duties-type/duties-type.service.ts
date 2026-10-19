@@ -18,9 +18,9 @@ export class DutiesTypeService {
     return result.rows;
   }
 
-  async create(data: CreateDutiesTypeDto) {
+  async create(tenantId: string, data: CreateDutiesTypeDto) {
     const result = await this.db.query(dutiesType.create, [
-      data.tenant_id,
+      tenantId,
       data.name,
       data.description ?? null,
     ]);

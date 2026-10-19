@@ -15,10 +15,11 @@ import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.gua
 import { RequiredLevel } from '@/common/decorators/level_metadata.decorator';
 import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiTags('PayrollParameters')
 @Controller('payroll-parameters')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class ParametersController {
   constructor(private readonly service: ParametersService) {}
 

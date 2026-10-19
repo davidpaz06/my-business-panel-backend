@@ -32,11 +32,12 @@ import {
   updatePromotionDoc,
   deletePromotionDoc,
 } from '@/docs/contexts/pos/promos';
+import { RateLimitGuard } from '@/common/rate-limit/rate-limit.guard';
 
 @ApiBearerAuth()
 @ApiTags('Promos')
 @Controller('promos')
-@UseGuards(AuthenticationGuard)
+@UseGuards(AuthenticationGuard, RateLimitGuard)
 export class PromosController {
   constructor(
     private readonly promosService: PromosService,
