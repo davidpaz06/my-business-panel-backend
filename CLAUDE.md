@@ -36,7 +36,7 @@ pnpm cabys:load:native          # ts-node native loader
 pnpm deploy:local               # build + cabys:load + start:prod
 ```
 
-Local DB: native PostgreSQL on `localhost:5432` (see `DB_CONNECTION` in `.env.development`). No Docker. Staging runs on Render with Supabase; production on RDS. Schema source is `../my-business-panel-database/bootstrap.sql`.
+Local DB: native PostgreSQL on `localhost:5432` (see `DATABASE_URL` in `.env.development`). No Docker. Staging runs on Render with Supabase; production on RDS. Schema source is `../my-business-panel-database/bootstrap.sql`.
 
 ## Boot / global setup (`src/main.ts`)
 

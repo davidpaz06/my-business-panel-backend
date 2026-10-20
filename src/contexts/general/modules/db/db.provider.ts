@@ -210,7 +210,7 @@ export const dbProvider = {
   useFactory: async (configService: ConfigService) => {
     const isLocal = configService.get<string>('NODE_ENV') !== 'production';
     const config: DatabaseConfig = {
-      connectionString: configService.get<string>('DB_CONNECTION'),
+      connectionString: configService.get<string>('DATABASE_URL'),
       max: Number(configService.get<number>('MAX_POOL_SIZE')) || 10,
       ssl: isLocal ? false : { rejectUnauthorized: false },
     };

@@ -5,9 +5,10 @@ import { LevelAuthorizationGuard } from '@/common/guards/level_authorization.gua
 import { UserModule } from '../user/user.module';
 import { StateModule } from '../state/state.module';
 import { SpecialCodeModule } from '../special_code/special_code.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [UserModule, StateModule, SpecialCodeModule],
+  imports: [UserModule, StateModule, SpecialCodeModule, AuthModule],
   providers: [TenantService, LevelAuthorizationGuard],
   controllers: [TenantController],
 })

@@ -62,7 +62,7 @@ $ pnpm test:cov
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
-Staging runs on Render, with the database on Supabase (connection string via `DB_CONNECTION`).
+Staging runs on Render, with the database on Supabase (connection string via `DATABASE_URL`).
 
 ## Resources
 

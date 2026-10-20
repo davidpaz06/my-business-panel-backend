@@ -72,7 +72,12 @@ export class AuthService {
     ]);
   }
 
-  private async issueTokens(userSession: IUserSession): Promise<IAuthTokens> {
+  /**
+   * Emite access + refresh token y guarda el hash del refresh en BD. Es lo que
+   * habilita la renovacion de sesion por 7 dias: un refresh que no esta en BD
+   * no se puede usar en /auth/refresh.
+   */
+  async issueTokens(userSession: IUserSession): Promise<IAuthTokens> {
     const [access_token, refresh_token] = await Promise.all([
       this.generateAccessToken(userSession),
       this.generateRefreshToken(userSession),

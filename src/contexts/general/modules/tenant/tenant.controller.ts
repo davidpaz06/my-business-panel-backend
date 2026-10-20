@@ -23,6 +23,7 @@ import { Session } from '@/common/decorators/session.decorator';
 import { IUserSession } from '@/common/interfaces/user_session.interface';
 import { TenantScopeService } from '@/common/tenant/tenant-scope.service';
 import { UserService } from '../user/user.service';
+import { setAuthCookies } from '../auth/auth-cookies';
 import { InvalidTenantError } from '@/common/errors/invalid_tenant.error';
 import {
   getAllTenantsDoc,
@@ -149,13 +150,9 @@ export class TenantController {
     }
     const result = await this.tenantService.createTenant(req);
 
-    if (result.token) {
-      response.cookie('auth_token', result.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 24 * 60 * 60 * 1000,
-      });
-      const { token, ...data } = result;
+    if (result.tokens) {
+      setAuthCookies(response, result.tokens);
+      const { tokens, ...data } = result;
       return data;
     }
 

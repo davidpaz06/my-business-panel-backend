@@ -25,6 +25,7 @@ import { StateModule } from '../state/state.module';
     StateModule,
   ],
   providers: [AuthService],
+  exports: [AuthService],
   controllers: [AuthController],
 })
 export class AuthModule {}

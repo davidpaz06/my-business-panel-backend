@@ -1,5 +1,4 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { DATABASE } from '@/contexts/general/modules/db/db.provider';
 import Database from '@resonance-components/datahandler';
 import Stripe from 'stripe';
@@ -9,6 +8,7 @@ import { generalQueries } from '@general/general.queries';
 import { hrQueries } from '@hr/hr.queries';
 import { StateService } from '../state/state.service';
 import { SpecialCodeService } from '../special_code/special_code.service';
+import { AuthService } from '../auth/auth.service';
 import { NewTenantDto } from './dto/newTenant.dto';
 import { UpdateTenantDto } from './dto/updateTenant.dto';
 import { Tenant } from './interface/tenant.interface';
@@ -28,7 +28,7 @@ export class TenantService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     @Inject('STRIPE') private readonly stripe: Stripe,
-    private readonly jwtService: JwtService,
+    private readonly authService: AuthService,
     private readonly stateService: StateService,
     private readonly specialCodeService: SpecialCodeService,
   ) {
@@ -435,14 +435,15 @@ export class TenantService {
       // Registrar el nuevo tenant en el cache en memoria del StateService
       this.stateService.addTenant(newTenant);
 
-      // ── 7. Generar token JWT (post-commit, datos ya persisten) ────────────
+      // ── 7. Emitir tokens de sesion (post-commit, datos ya persisten) ──────
+      // Mismo flujo que el login: el refresh queda en BD para renovar 7 dias.
       const userSession: IUserSession = {
         user_id: userId,
         email: user.email,
         tenant_id: tenantId,
         role_id: 2,
       };
-      const token = await this.jwtService.signAsync(userSession);
+      const tokens = await this.authService.issueTokens(userSession);
 
       return {
         tenant: newTenant,
@@ -455,7 +456,7 @@ export class TenantService {
           status: stripeStatus,
           usingSpecialCode,
         },
-        token,
+        tokens,
       };
     } catch (error) {
       if (!committed)

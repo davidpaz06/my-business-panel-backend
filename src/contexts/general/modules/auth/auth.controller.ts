@@ -1,9 +1,10 @@
 import { Post, Controller, Body, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { AuthService } from '@/contexts/general/modules/auth/auth.service';
 import {
-  AuthService,
-  IAuthTokens,
-} from '@/contexts/general/modules/auth/auth.service';
+  clearAuthCookies,
+  setAuthCookies,
+} from '@/contexts/general/modules/auth/auth-cookies';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change_password.dto';
 import { Response } from 'express';
@@ -20,44 +21,10 @@ import {
   byCookieHash,
 } from '@/common/rate-limit/rate-limit.decorator';
 
-const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000; // 15 min, en linea con JWT_ACCESS_EXPIRATION
-const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 dias, en linea con JWT_REFRESH_EXPIRATION
-
 @ApiTags('Auth')
 @Controller('/auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  private setAuthCookies(response: Response, tokens: IAuthTokens): void {
-    const isCrossSite = ['production', 'staging'].includes(
-      process.env.NODE_ENV ?? '',
-    );
-    response.cookie('auth_token', tokens.access_token, {
-      httpOnly: true,
-      secure: isCrossSite,
-      sameSite: isCrossSite ? 'none' : 'lax',
-      maxAge: ACCESS_TOKEN_MAX_AGE,
-    });
-    response.cookie('refresh_token', tokens.refresh_token, {
-      httpOnly: true,
-      secure: isCrossSite,
-      sameSite: isCrossSite ? 'none' : 'lax',
-      maxAge: REFRESH_TOKEN_MAX_AGE,
-    });
-  }
-
-  private clearAuthCookies(response: Response): void {
-    const isCrossSite = ['production', 'staging'].includes(
-      process.env.NODE_ENV ?? '',
-    );
-    const options = {
-      httpOnly: true,
-      secure: isCrossSite,
-      sameSite: isCrossSite ? ('none' as const) : ('lax' as const),
-    };
-    response.clearCookie('auth_token', options);
-    response.clearCookie('refresh_token', options);
-  }
 
   @ApiOperation(loginDoc.operation)
   @ApiResponse(loginDoc.responses[200])
@@ -70,7 +37,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const { user, tokens } = await this.authService.login(loginDto);
-    this.setAuthCookies(response, tokens);
+    setAuthCookies(response, tokens);
     return { message: 'Login successful', user };
   }
 
@@ -83,7 +50,7 @@ export class AuthController {
   ) {
     const refreshTokenCookie = request.cookies['refresh_token'];
     const tokens = await this.authService.refresh(refreshTokenCookie);
-    this.setAuthCookies(response, tokens);
+    setAuthCookies(response, tokens);
     return { message: 'Token refreshed' };
   }
 
@@ -96,7 +63,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const tokens = await this.authService.changePassword(user, dto);
-    this.setAuthCookies(response, tokens);
+    setAuthCookies(response, tokens);
     return { message: 'Password changed successfully' };
   }
 
@@ -110,7 +77,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     await this.authService.logout(user.user_id);
-    this.clearAuthCookies(response);
+    clearAuthCookies(response);
     return { message: 'Logout successful' };
   }
 }
